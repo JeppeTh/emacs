@@ -1,8 +1,15 @@
 ;;; Main emacs init file, .emacs 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;;(setq magit-git-executable "/app/vbuild/RHEL6-x86_64/git/2.12.2/bin/git")(require 'tramp)
+
+(require 'server)
+(and window-system (server-start))
+;;(and (not (server-running-p)) window-system (server-start))
+
 ;; Add HOME and HOME/emacs to load-path
 (setq load-path (append load-path (list "~/emacs")))
+;;(setq load-path (append load-path (list "~/emacs/egg-master")))
 (setq load-path (append load-path (list (getenv "HOME"))))
 
 ;; Requires > 24.3
@@ -558,6 +565,10 @@ On attempt to pass beginning of prompt, stop and signal error."
 
 ;; Python
 (require 'python nil t)
+(setq-default python-shell-interpreter  "C:/Python27/python.exe")
+;;      python-shell-interpreter-args "-i C:/Python27/Scripts/ipython-script.py")
+(setq-default python-command  "C:/Python27/python.exe")
+
 (defun my-python-shell-mode-hook ()
   "My python-shell-mode-hook"
   (interactive)
@@ -568,6 +579,15 @@ On attempt to pass beginning of prompt, stop and signal error."
   (comint-read-input-ring))
 
 (add-hook 'inferior-python-mode-hook 'my-python-shell-mode-hook t)
+
+;;(defadvice python-shell (after my-python-shell-mode-hook first nil activate)
+;;  "My python-shell-mode-hook"
+;;  (interactive)
+;;  (local-set-key [(control tab)] 'dabbrev-expand)
+
+;;  (set-process-query-on-exit-flag (get-buffer-process (buffer-name)) nil)
+;;  (setq comint-input-ring-file-name "~/.python_history")
+;;  (comint-read-input-ring))
 
 (defun my-python-mode-hook ()
   (interactive)
@@ -625,6 +645,14 @@ On attempt to pass beginning of prompt, stop and signal error."
   (add-hook 'json-mode-hook 'my-json-mode t))
 
 ;; Windows stuff
+(make-variable-buffer-local 'make-backup-files)
+(defun my-ignore-backups ()
+  (if (or (string-match "d:\\\\My Documents\\\\GitHub" buffer-file-name)
+          (string-match "c:\\\\Users\\\\Owner\\\\Desktop" buffer-file-name)
+          )
+      (setq make-backup-files nil)))
+(add-hook 'find-file-hooks 'my-ignore-backups)
+
 (defun my-strip-strlm ()
   (goto-char (point-min))
   (while (re-search-forward "\r+$" nil t) (replace-match "" t t)))
@@ -667,11 +695,13 @@ On attempt to pass beginning of prompt, stop and signal error."
         (setq-default browse-url-browser-function
                       'browse-url-default-windows-browser)
 
-;;        ;; Make ediff work in Windows
-;;        (setq ediff-diff-program "fc")
-;;        (setq ediff-diff-options "/n /t")
+        ;; Make ediff work in Windows
+        (setq ediff-diff-program "c:/MinGW/msys/1.0/bin/diff.exe")
+        (setq ediff-diff3-program "c:/MinGW/msys/1.0/bin/diff3.exe")
+        (setq ediff-cmp-program "c:/MinGW/msys/1.0/bin/cmp.exe")
+        ;;(setq ediff-diff-options "/n /t")
 ;;        (setq ediff-diff3-program "fc")
-;;        (setq ediff-diff-ok-lines-regexp
+;;        (setq ediff-diff-ok-lines-regexp 
 ;;              "^\\([0-9,]+[acd][0-9,]+?$\\|[ ]*[0-9]+:\\|.*Comparing files.*\\|[<>] \\|---\\|\\*\\*\\*\\*\\*.*\\|.*Warning *:\\|.*No +newline\\|.*missing +newline\\|^?$\\)")
 ;;        (setq ediff-match-diff-line
 ;;              "^[ ]+\\([0-9]+\\)\\(:\\)\\(.*$\\)
@@ -685,8 +715,7 @@ On attempt to pass beginning of prompt, stop and signal error."
 
         ;; Set up Printer
         (setq-default ps-lpr-command "")
-        (setq-default printer-name "SELN01077204BP")
-        ;;(setq-default printer-name "//ESELNMW001/LN81LJ_PS")
+        (setq-default printer-name "//jtserver/jtPrinter")
         (setq-default ps-printer-name printer-name)
 
         ;; Support for shortcuts
@@ -698,6 +727,13 @@ On attempt to pass beginning of prompt, stop and signal error."
 )
 
 ;; My own functions
+
+(defun bash-shell ()
+  (interactive)
+  (let ((explicit-shell-file-name "c:/windows/sysnative/bash.exe"))
+    (shell)
+    (term-send-string (get-buffer-process (buffer-name)) "PS1='\\w\\$ '\n")))
+
 ;;;;;;;;;;;;;;;;;;;
 (defun my-compile ()
   "Same as 'compile but switches window, and tails the buffer."
@@ -874,6 +910,7 @@ On attempt to pass beginning of prompt, stop and signal error."
                 ("\\.asn\\>"      . snmp-mode)
                 ("\\.diaSpec\\>"  . diaspec-mode)
                 ("\\.\\(dialyzer\\|plt\\).log\\>" . compilation-mode)
+                ("\\.pys\\>"      . python-mode)
                 )
             auto-mode-alist
             ))
