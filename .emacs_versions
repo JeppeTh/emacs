@@ -1,0 +1,69 @@
+;; Some version related issues
+
+(if (< emacs-major-version 24)
+    (progn
+      ;;;; which-function-mode  has been renamed
+      ;;(defalias 'which-function-mode 'which-func-mode)
+      (defalias 'frameset-to-register 'frame-configuration-to-register)
+      )
+  )
+
+(if (< emacs-major-version 23)
+    (progn
+      (defalias 'read-shell-command 'my-read-shell-command)
+      ;; browse-url-lynx-emacs has been renamed
+      (defalias 'browse-url-text-emacs 'browse-url-lynx-emacs)
+      ;; interactive-p has been renamed
+      (defalias 'called-interactively-p 'interactive-p)
+      ))
+
+(if (< emacs-major-version 22)
+    (progn
+      ;; Complete filenames in e.g. Shell Mode Command. Fix futher down doesn't
+      ;; seem  to work for < 22
+      (define-key minibuffer-local-map [tab] 'comint-dynamic-complete)
+      ;; process-kill-without-query has been renamed
+      (defalias 'set-process-query-on-exit-flag 'process-kill-without-query)
+      (defalias 'with-no-warnings 'progn)
+      (if (fboundp 'defvaralias)
+          (defvaralias 'imenu-use-popup-menu 'imenu-always-use-completion-buffer-p))
+      ))
+(if (< emacs-major-version 21)
+    (with-no-warnings
+      ;; Automatically resize minibuffer - always enabled from emacs 21.
+      (resize-minibuffer-mode 1)))
+(if (> emacs-major-version 20)
+    (progn
+      (setq-default display-buffer-reuse-frames t)
+      (setq-default eval-expression-debug-on-error nil)))
+(if (> emacs-major-version 22)
+    (progn
+      (setq-default split-width-threshold nil)
+      (setq-default large-file-warning-threshold nil)
+      (setq-default imenu-eager-completion-buffer t)
+    )
+)
+
+(if (> emacs-major-version 23)
+    (progn
+      (defvar directory-sep-char 92 "Parameter removed in emacs 24")
+      ;; Added for magit...
+      (require 'package)
+      (add-to-list 'package-archives
+                   '("marmalade" . "https://marmalade-repo.org/packages/"))
+      (add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/"))
+      (add-to-list 'package-archives '("melpa" . "http://melpa.org/packages/"))
+      ;; The original ELPA archive still has some useful
+      ;; stuff.
+      ;; (add-to-list 'package-archives<br />
+      ;;              '("elpa" . "http://tromey.com/elpa/"))
+      (package-initialize)
+      (if (and (= emacs-major-version 24) (< emacs-minor-version 4))
+          (defalias 'frameset-to-register 'frame-configuration-to-register))
+      ))
+
+(require 'compile)
+(defun my-compilation-start (COMMAND ERROR-MESSAGE NAME-FUNCTION)
+  (if (< emacs-major-version 22)
+      (compile-internal COMMAND ERROR-MESSAGE nil nil nil NAME-FUNCTION)
+    (compilation-start COMMAND nil NAME-FUNCTION)))

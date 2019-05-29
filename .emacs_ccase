@@ -1,0 +1,812 @@
+;; clearcase  specific file, .emacs_ccase
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(my-autoload-ccase t)
+
+;; Add search paths for checkout.el
+(setq load-path
+  (append
+    (list 
+      "/usr/atria/examples/clearcase/emacs"
+      "/usr/local/atria3.0.2/examples/clearcase/emacs"
+      "/opt/ccase_rls/v3.2.1/sun5/examples/clearcase/emacs"
+    )
+    load-path
+  )
+)
+
+;; Clearcase macros from Atria
+(load "checkouts" nil 1)
+(defalias 'shell-command-verbose 'my-shell-command-verbose)
+
+
+;; Redefine shell-command-verbose to make it possible
+;; to run several jobs simultanously in emacs
+;(defun shell-command-verbose (command)
+;  "Execute COMMAND in shell process."
+;  (interactive "sCommand: \n")
+;  (message (concat "Executing: " command " ..."))
+;  (start-process-shell-command command nil nil command)
+;  (message command))
+
+;; Use Graphical Cleartool for diff
+;;(setq diff-command  "cleartool diff")
+;;(setq diff-switches "-graph")
+
+;(defun find-curr-file-again (read-only)
+;  (revert-buffer nil t))
+(defun find-curr-file-again (read-only &optional new-pname)
+    "Read in the current file again, READONLY (t) or not (nil)."
+    (let ((pname (if new-pname new-pname (get-pname)))
+          (linenum (1+ (count-lines 1 (point-at-bol)))))
+      (kill-buffer (buffer-name))
+      (if read-only
+          (find-file-read-only pname)
+        (find-file pname))
+      (goto-char (point-min)) (forward-line (1- linenum))))
+      ;;(goto-line linenum)))
+
+(defun get-pname (&optional action)
+  (interactive)
+  (let ((result (get-pname-no-error)))
+    (if (and result (ok-to-perform-action result action))
+        result
+      (error "Buffer is not a valid file"))))
+
+(defun get-pname-no-error ()
+  (interactive)
+  (cond ((and buffer-file-name clearcase-mode (not (eq clearcase-mode t)))
+         (let ((symlink (file-symlink-p buffer-file-name)))
+           (if symlink
+               symlink
+             buffer-file-name)))
+        ((and dired-directory clearcase-dired-mode (not (eq clearcase-mode t)))
+         dired-directory)
+        ( 1
+         nil)))
+
+(defun ok-to-perform-action (pname action)
+  (cond ((equal action "co")
+         (clearcase-file-ok-to-checkout pname))
+        ((equal action "ci")
+         (clearcase-file-ok-to-checkin pname))
+        ((equal action "unco")
+         (clearcase-file-ok-to-uncheckout pname))
+        (t
+         t)))
+;; My own clearcase extensions
+;(defun checkout-curr (comment)
+;  "Checkout version in current buffer with COMMENT."
+;  (interactive (list (if (get-pname)
+;                         (read-string "Comment: " last-co-comment)
+;                       nil)))
+(defun checkout-curr ()
+  "Checkout version in current buffer."
+  (interactive)
+  (let ((pname (clearcase-vxpath-element-part (get-pname "co"))))
+;    (setq last-co-comment comment)
+    (shell-command-verbose
+;     (concat "cleartool checkout -c " (quote-string comment) " " pname))
+     (concat "cleartool checkout -nc " pname))
+    (find-curr-file-again nil pname)))
+
+(defun eclipse-curr ()
+  "Eclipse version in current buffer."
+  (interactive)
+  (let ((pname (clearcase-vxpath-element-part (get-pname "co"))))
+    (if dired-directory
+        (error "Only files can be eclipsed")
+      (shell-command-verbose (concat "\\cp -f " pname " " pname ".org"))
+      (shell-command-verbose (concat "eclipse " pname))
+      (find-curr-file-again nil pname))))
+
+(defun uneclipse-curr ()
+  "Uneclipse current buffer."
+  (interactive)
+  (let ((pname (get-pname)))
+    (if (or (clearcase-file-ok-to-checkout pname)
+            (clearcase-file-ok-to-checkin pname)
+            dired-directory)
+        (error "Buffer is not a valid file")
+      (shell-command-verbose (concat "\\mv " pname " " pname ".keep"))
+;      (shell-command-verbose (concat "\\rm " pname))
+      (find-curr-file-again t))))
+
+(defun uncheckout-curr ()
+  "Uncheckout version in current buffer and keep private data."
+  (interactive)
+  (if (is-in-my-git-workspace)
+      (my-git-uncheckout-curr)
+    (let ((pname (get-pname "unco")))
+      (shell-command-verbose (concat "cleartool uncheckout -keep " pname))
+      (find-curr-file-again t))))
+
+(defun checkin-curr ()
+    "Checkin version in current buffer."
+    (interactive)
+    (let ((pname (get-pname "ci"))
+          (option "-nc")
+;          (option nil)
+          (choice nil))
+      (while (not option)
+        (setq choice
+              (read-string "Comment: s (same) or n (new) or l (list): " "s"))
+        (cond ((equal choice "s")
+               (setq option "-nc"))
+              ((equal choice "n")
+               (let ((comment (read-string "Comment: " last-ci-comment)))
+                 (setq last-ci-comment comment)
+                 (setq option (concat "-c " (quote-string comment)))))
+              ((equal choice "l")
+               (shell-command-verbose
+                (concat "cleartool lscheckout " pname)))
+              (t
+               (message (concat "Unrecognized choice: " choice "."))
+               (sleep-for 2))
+              ))
+      (shell-command-verbose
+       (concat "cleartool checkin " option " " pname))
+      (find-curr-file-again t)))
+
+;(defun checkout-unres-curr (comment)
+;  "Checkout version unreserved in current buffer with COMMENT."
+;  (interactive (list (if (get-pname)
+;                         (read-string "Comment: " last-co-comment)
+;                       nil)))
+(defun checkout-unres-curr ()
+  "Checkout version unreserved in current buffer."
+  (interactive)
+  (let ((pname (get-pname "co")))
+;    (interactive (list (read-string "Comment: " last-co-comment)))
+;      (setq last-co-comment comment)
+;      (shell-command-verbose  (concat "cleartool checkout -unr -c " (quote-string comment) " " pname))
+    (shell-command-verbose
+     (concat "cleartool checkout -unr -nc  " pname))
+    (find-curr-file-again nil)))
+
+(defun xlsvtree-curr ( )
+    "Show version tree for file in current buffer. ( Backgrounded )"
+    (interactive)
+    (let ((pname (get-pname)))
+      (if (is-windows)
+          (shell-command-verbose (concat "clearvtree.exe " (get-pname) " &"))
+        (shell-command-verbose (concat "xlsvtree " (get-pname) " &")))))
+
+(defun xdiff-previous ( )
+    "Show version tree for file in  current buffer. ( Backgrounded )"
+    (interactive)
+    (let ((pname (get-pname)))
+      (shell-command-verbose (concat "cleartool diff -pred -grap " pname " &"))))
+
+(defun uncheckout-curr-rm ()
+  "Uncheckout version in current buffer and remove private data."
+    (interactive)
+    (let ((pname (get-pname "unco")))
+      (shell-command-verbose (concat "cleartool uncheckout -rm " pname))
+      (find-curr-file-again t)))
+
+(require 'man)
+(defvar ct-man-map nil
+  "Keymap used in ct-man.")
+
+(defun ct-man (entry)
+  (interactive (list (read-string "ct man entry: ")))
+  (let ((newbuffer (concat "*Ct Man " entry "*")))
+    (if (not (get-buffer newbuffer))
+        (shell-command (concat "cleartool man " entry) newbuffer))
+    (if (is-windows)
+        ;; pop-up window in windows
+        (kill-buffer newbuffer)
+      ;; Unix
+      (switch-to-buffer-other-window newbuffer)
+      (Man-mode)
+      (setq ct-man-map (make-sparse-keymap))
+      (set-keymap-parent ct-man-map Man-mode-map)
+      (use-local-map ct-man-map)
+
+      (local-set-key [return] 'ct-man-word-at-point)
+      (local-set-key "m"      'ct-man))))
+
+(defun ct-man-word-at-point ()
+  (interactive)
+  (ct-man (thing-at-point 'symbol)))
+
+(defvar ct-apropos-map nil
+  "Keymap used in ct-apropos.")
+
+(defun ct-apropos (entry)
+  (interactive (list (read-string "ct apropos entry: ")))
+  (let ((newbuffer (concat "*Ct Apropos " entry "*")))
+    (if (not (get-buffer newbuffer))
+        (shell-command (concat "cleartool apropos " entry) newbuffer))
+    (switch-to-buffer-other-window newbuffer)
+    (setq ct-apropos-map (make-sparse-keymap))
+    (use-local-map ct-apropos-map)
+    (local-set-key [return] 'ct-man-word-at-point)))
+
+;(defvar my-clearcase-edcs-mode-keywords
+;  '(("#.*$" . 'font-lock-comment-face)))
+
+(defun my-clearcase-edcs-mode-hook ()
+  (set (make-local-variable 'comment-start) "#")
+  (local-set-key "\C-c\C-c" 'comment-region)
+;  (set (make-local-variable 'font-lock-defaults)
+;       '(my-clearcase-edcs-mode-keywords t))
+  ;; Setting comment syntax automatically fontyfies comments
+  (modify-syntax-entry ?# "<")   ; Comment start
+  (modify-syntax-entry ?\^j ">") ; Comment end
+  (font-lock-mode t)
+  (auto-fill-mode nil))
+
+(defun lsco_avobs ()
+  (interactive)
+  (shell-command "lsco_avobs" "lsco_avobs")
+  (let ((lsco_buffer (get-buffer "lsco_avobs")))
+     (if lsco_buffer
+         (progn
+           (with-current-buffer lsco_buffer
+             (local-set-key "e" (lambda()
+                                  (interactive)
+                                  (clearcase-ediff-file-with-version (ffap-string-at-point)
+                                     (clearcase-fprop-predecessor-version (ffap-string-at-point)))))
+             (local-set-key [return] 'my-find-file-at-point)
+             )
+           (display-buffer lsco_buffer)
+           ))))
+;;
+;; The following functions requires 'clearcase support
+;;
+
+(require 'clearcase)
+
+(defun isfile-checkedout ()
+  (interactive)
+  (if (and clearcase-mode (file-readable-p buffer-file-name))
+;      (if (string-match "Rule: CHECKEDOUT" (clearcase-ct-blocking-call "ls" "-d" buffer-file-name))
+;          (setq file-checkedout 1)
+;      )
+      (if (string-match "RESERVED" clearcase-mode)
+          (setq file-checkedout 1))
+    (if (and (not buffer-file-name) clearcase-dired-mode)
+      (if (not (string-match "RESERVED" clearcase-dired-mode))
+          (setq file-checkedout nil)
+        (setq file-checkedout 1))))
+;  (if (string-match "CHECKEDOUT" (shell-command-to-string (concat "ct ls -short " buffer-file-name)))
+;      (setq file-checkedout 1)
+;  )
+;  (cond ( (not clearcase-loaded)
+;          (setq-default clearcase-loaded 1)
+;          (defvar tmp-alist minor-mode-alist)
+;          (if (not (load "clearcase" 1))
+;              (defvar clearcase-support nil)
+;            (defvar clearcase-support 1)
+;            (setq-default minor-mode-alist tmp-alist)
+;            (setq-default clearcase-complete-viewtags nil)
+;          )
+;        )
+;  )
+)
+
+(defun ccase-title ()
+  (cond ( (get-pname-no-error)
+          (let ((ver-string (clearcase-fprop-version (get-pname))))
+            (if (and (not (zerop (length ver-string)))
+                     (not (string-match "derived object" clearcase-ct-return)))
+                (setq frame-title-format (my-fix-long-name ver-string))))
+        )
+  )
+  )
+
+
+(defun get-curr-branch ()
+  (let ((ver-string (clearcase-fprop-version (get-pname))))
+    (substring ver-string 0 (string-match "/[0-9]+$" ver-string))))
+
+(defun checkout-unres-same-branch-curr ()
+  "Checkout version unreserved on the same branch in current buffer."
+  (interactive)
+  (let ((pname (clearcase-vxpath-element-part (get-pname "co"))))
+    (shell-command-verbose
+     (concat "cleartool checkout -unr -nc -branch " (get-curr-branch) " " pname))
+    (find-curr-file-again nil pname)))
+
+(defun ccase-find-branch-base ()
+  "Switch to a buffer visiting branch base of current buffer."
+    (interactive)
+    (let ((pname (get-pname)))
+      (find-file (concat
+                  (clearcase-vxpath-element-part pname)
+                  "@@"
+                  (clearcase-vxpath-version-of-branch-base pname)))))
+
+(defun my-clearcase-read-version-name (prompt file)
+  "Redefine `clearcase-read-version-name', support for cases when visted buffer
+ contains a complete version path."
+  (let* ((insert-default-directory nil)
+         (predecessor (clearcase-fprop-predecessor-version file))
+         (default-filename (clearcase-vxpath-cons-vxpath file predecessor))
+
+         ;; To get this to work it is necessary to make Emacs think
+         ;; we're completing with respect to "ELEMENT@@/" rather
+         ;; than "ELEMENT@@". Otherwise when we enter a version
+         ;; like "/main/NN", it thinks we entered an absolute path.
+         ;; So instead, we prompt the user to enter "main/..../NN"
+         ;; and add back the leading slash before returning.
+         ;;
+         ;;;;;;;;; CHANGE ;;;;;;;;;;
+         (completing-dir (concat (clearcase-vxpath-element-part file) "@@/")))
+         ;;;;;;;;; END OF CHANGE ;;;;;;;;;;
+    (if (and (clearcase-file-is-in-mvfs-p file) (not clearcase-on-mswindows))
+        ;; Completion only works in MVFS:
+        ;;
+        (concat "/" (read-file-name prompt
+                                    completing-dir
+                                    (substring predecessor 1)
+                                    nil
+;                                    t
+                                    (substring predecessor 1)))
+      (concat "/" (read-string prompt
+                               (substring predecessor 1)
+                               nil)))))
+
+(defalias 'clearcase-read-version-name 'my-clearcase-read-version-name)
+
+(defun ccase-get-version (prompt)
+;  (clearcase-read-version-name prompt (clearcase-vxpath-element-part (get-pname))))
+  (clearcase-read-version-name prompt (get-pname)))
+
+(defun ccase-find-other-version (version)
+  "Switch to a buffer visiting an other version of current buffer."
+  (interactive (list (ccase-get-version "Find version: ")))
+  (find-file (concat (clearcase-vxpath-element-part (get-pname)) "@@" version)))
+
+(defun ccase-find-alternate-version (version)
+  "Kills current buffer and switch to a buffer visiting an other version of current buffer."
+  (interactive (list (ccase-get-version "Find alternate version: ")))
+  (find-alternate-file (concat (clearcase-vxpath-element-part (get-pname)) "@@" version)))
+
+(defun ccase-insert-version (version)
+  "Insert other version in current buffer."
+  (interactive (list (ccase-get-version "Find alternate version: ")))
+  ;;(mark-whole-buffer)
+  ;;(call-interactively 'delete-region)
+  (insert-file-contents (concat (clearcase-vxpath-element-part (get-pname)) "@@" version)
+                        nil nil nil t))
+
+(defun my-clearcase-gui-diff-named-version-current-buffer (version)
+  "Redefine `clearcase-gui-diff-named-version-current-buffer'. Added support 
+for directories, and not just files."
+  (interactive (list (ccase-get-version "Version for comparison: ")))
+  (my-clearcase-diff-named-version-current-buffer t version))
+
+(defun my-clearcase-ediff-named-version-current-buffer (version)
+  "Redefine `clearcase-ediff-named-version-current-buffer'. Added support 
+for directories, and not just files."
+  (interactive (list (ccase-get-version "Version for comparison: ")))
+  (my-clearcase-diff-named-version-current-buffer nil version))
+
+(defun my-clearcase-diff-named-version-current-buffer (gui version)
+  (let ((truename (if buffer-file-name buffer-file-name dired-directory)))
+    ;; nyi: if we're in history-mode, probably should just use
+    ;; (read-file-name)
+    ;;
+    (if gui
+        (clearcase-gui-diff-file-with-version truename version)
+      (clearcase-ediff-file-with-version truename version))))
+
+(defalias 'clearcase-gui-diff-named-version-current-buffer
+          'my-clearcase-gui-diff-named-version-current-buffer)
+
+(defalias 'clearcase-ediff-named-version-current-buffer
+          'my-clearcase-ediff-named-version-current-buffer)
+
+(defun my-clearcase-gui-diff-merged-version-current-buffer ()
+  "Compare (GUI) current buffer with version it was merged from."
+  (my-clearcase-diff-merged-version-current-buffer t))
+
+(defun my-clearcase-ediff-merged-version-current-buffer ()
+  "Compare (EDIFF) current buffer with version it was merged from."
+  (interactive)
+  (my-clearcase-diff-merged-version-current-buffer nil))
+
+(defun my-clearcase-diff-merged-version-current-buffer (gui)
+  (interactive)
+  (my-clearcase-diff-named-version-current-buffer gui
+   (clearcase-vxpath-version-part (my-get-merged-version (get-pname)))))
+  ;;(interactive)
+  ;;(let* ((describe-data (my-ct-describe (get-pname)))
+  ;;       (found (string-match "Merge <- \\(/.+$\\)" describe-data))
+  ;;       (original-file (if found (match-string 1 describe-data))))
+  ;;  (if original-file
+  ;;      (my-clearcase-gui-diff-named-version-current-buffer (clearcase-vxpath-version-part original-file))
+  ;;    (error "Version not merged."))))
+
+(defun my-get-merged-version(org-file)
+  (let* ((describe-data (my-ct-describe org-file))
+         (found (string-match "Merge <- \\(/.+$\\)" describe-data)))
+    (if found (match-string 1 describe-data)
+      (error (concat org-file " not merged.")))))
+
+(defun ct-check-delivery ()
+  "Check if that all merged files are unchanged compared to merged-from version."
+  (interactive)
+  (let ((diff-result (ct-diff-status-for-checked-out))
+        (result-buffer "versions_changed"))
+    (if (equal "" diff-result)
+        (message "ok")
+      (if (get-buffer result-buffer) (kill-buffer result-buffer))
+      (generate-new-buffer result-buffer)
+      (set-buffer result-buffer)
+      (insert (concat "These versions are changed:\n" diff-result))
+      (local-set-key "e" (lambda()
+                           (interactive)
+                           (clearcase-ediff-file-with-version
+                            (ffap-string-at-point)
+                            (clearcase-vxpath-version-part (my-get-merged-version (ffap-string-at-point))))))
+      (local-set-key [return] 'my-find-file-at-point)
+      (display-buffer result-buffer))))
+    
+(defun ct-diff-status-for-checked-out ()
+  (interactive)
+  (mapconcat
+   (lambda (co-file)
+
+     (condition-case err
+         (progn
+           (let* ((org-version (my-get-merged-version co-file)))
+             (if (equal "0" (mysh-blocking-call "ct" "diff" "-option" "\"-status_only\"" co-file org-version ";echo" "-n" "$status"))
+                 ""
+               (concat co-file "\n"))))
+       (error
+        (concat (car (cdr err)) "\n"))))
+   (split-string (mysh-blocking-call "lsco_avobs"))
+   nil))
+
+(defalias 'clearcase-gui-diff-merged-version-current-buffer
+          'my-clearcase-gui-diff-merged-version-current-buffer)
+
+(defalias 'clearcase-ediff-merged-version-current-buffer
+          'my-clearcase-ediff-merged-version-current-buffer)
+
+(defun my-clearcase-find-last-version (&optional file)
+  "Find the final version current buffer has been merged to."
+  (interactive)
+  (find-file (my-clearcase-get-last-version file)))
+
+(defun my-clearcase-get-last-version (&optional file)
+  "Get the final version current buffer has been merged to."
+  (interactive)
+  (let* ((merged-to (ct-find-merged-to-version file))
+         (lsv-version (if merged-to (string-match ".+/main/ndpgsn_5_0/[0-9]+$" merged-to) nil)))
+    (if (and merged-to (not lsv-version))
+        ;; Found a version continue
+        (condition-case nil
+            (my-clearcase-get-last-version merged-to)
+          (error
+           merged-to))
+      (if lsv-version
+          merged-to
+        (error "Version not merged.")))))
+
+(defalias 'clearcase-find-last-version
+          'my-clearcase-find-last-version)
+
+(defun ct-find-merged-from-version (&optional file)
+  (let* ((describe-data (my-ct-describe (if file file (get-pname))))
+         (found (string-match "Merge <- \\(/.+$\\)" describe-data)))
+    (if found (match-string 1 describe-data))))
+
+(defun ct-find-merged-to-version (&optional file absolute)
+  (let* ((file (if file file (get-pname)))
+         (describe-data (my-ct-describe file))
+         (index 0))
+         ;; Search for latest Merge
+    (while (string-match-p "Merge ->" describe-data index)
+      (setq index (+ (string-match "Merge -> \\(/.+$\\)" describe-data index) 1)))
+    (if (> index 0) 
+        (match-string 1 describe-data)
+      ;; Perhaps next version is merged? Only checked on absolute version is requested.
+      (if (and (not absolute) (setq file (ct-get-next-version file)))
+          (ct-find-merged-to-version file))
+      )))
+
+(defun ct-get-next-version (file)
+  "Retuns next clearcase version on same branch if there is any."
+  (interactive)
+  (string-match "\\(.+/\\)\\([^/]+\\)" file)
+  (setq file 
+        (concat (match-string 1 file) 
+                (number-to-string (+ 1 (string-to-number (match-string 2 file)))))
+        )
+  (if (file-readable-p file) file))
+
+(defun my-ct-describe (file)
+  "For some reason way faster than `shell-command-to-string'"
+  (interactive)
+  (let ((temp-buffer "*clearcase*"))
+    (if (get-buffer temp-buffer) (kill-buffer temp-buffer))
+    (clearcase-ct-do-cleartool-command "describe" file 'unused)
+    (with-current-buffer temp-buffer (buffer-string))
+    ))
+
+(defun initialize-ct-find-debug-buffer (debug-buffer-name data initial)
+  (if (not initial)
+      debug-buffer-name
+    (if (get-buffer debug-buffer-name) (kill-buffer debug-buffer-name))
+    (with-current-buffer (get-buffer-create debug-buffer-name)
+      (insert (concat (format-time-string "%T") " Searching for:\t" data "\n")))
+    debug-buffer-name
+    ))
+
+(defun ct-find-debug (debug-buffer source &optional parameters)
+  (condition-case debug-buffer
+      (with-current-buffer (get-buffer-create debug-buffer)
+        (insert "--------------------------------------------------------------------------------\n")
+        (insert (concat (format-time-string "%T ") source "\n"))
+        (dolist (param parameters)
+          (insert (concat (nth 0 param) ": \t" (nth 1 param) "\n"))))))
+
+(defun ct-find-original-version (data &optional inputfile escaped)
+  "Finds the oldest clearcase version of current element where given strings is found."
+  (interactive "sUnique String: ")
+  (let* (;;(data (if escaped data (my-escape data)))
+         (debug-buffer (initialize-ct-find-debug-buffer "*ct-find-original-version*" data (not escaped)))
+         (file (clearcase-vxpath-version-extend (if inputfile inputfile (get-pname))))
+         (first-grep (ct-grep-for-first-version data file debug-buffer))
+         (merged-from (ct-find-merged-from-version first-grep))
+         )
+    ;; Some debug
+    (ct-find-debug debug-buffer "ct-find-original-version" 
+                   (list (list "inputfile" inputfile) 
+                         (list "first-grep" first-grep) 
+                         (list "merged-from" merged-from)))
+    (if (and merged-from (or (not inputfile)
+                             ;; Check that's not merge from same branch
+                             (not (equal (clearcase-vxpath-branch merged-from)
+                                         (clearcase-vxpath-branch inputfile)))
+                             ;; Also make sure first-grep is older than
+                             ))
+        ;;;; Found a version continue
+        (condition-case nil
+              (ct-find-original-version data merged-from t)
+          (error
+           (find-file merged-from)
+           (goto-char (point-min))
+           (search-forward data)))
+           ;;(search-forward (my-unescape data))))
+      (find-file first-grep)
+      (goto-char (point-min))
+      (search-forward data)
+      ;;(search-forward (my-unescape data))
+      )))
+
+(defun ct-find-removed-version (data &optional inputfile escaped)
+  "Finds the first clearcase version of current element where given strings is removed."
+  (interactive "sUnique String: ")
+  (let* (
+         (file (clearcase-vxpath-version-extend (if inputfile inputfile (get-pname))))
+         (last-version (ct-grep-for-last-version data file))
+         (next-version (ct-get-next-version last-version))
+         (delivered-version (if (not next-version) (my-clearcase-get-last-version last-version)))
+         (next-delivered-version (if delivered-version (ct-get-next-version delivered-version)))
+         (version-to-find (if next-delivered-version  delivered-version
+                            (if delivered-version delivered-version
+                              next-version)))
+
+         )
+    (find-file version-to-find)
+    ))
+
+(defun ct-grep-for-first-version (data &optional inputfile debug-buffer)
+  "Finds the oldest clearcase version of current element where given strings is found, by using grep."
+  (interactive)
+  (let* ((file (if inputfile inputfile (get-pname)))
+         (element (clearcase-vxpath-element-part file))
+         (version (clearcase-vxpath-version-part file))
+         (dummy (string-match "\\(.+/\\)\\([^/]+\\)" version))
+         (version-number (match-string 2 version))
+         (candidates (concat element "@@" (match-string 1 version) "[0-9]*"))
+         ;;(grep-result (shell-command-to-string (concat "fgrep -nl \"" data "\" " candidates)))
+         ;;(grep-result (my-shell-cmd-to-string (concat "grep -nl -e \"" data "\" " candidates)))
+         (grep-result (mysh-blocking-call
+                       "grep" "-l" "-F" (concat "\"" data "\"") candidates
+                               "|" "awk" "'{print length, $0}'" "|" "sort" "-n" "|" "awk" "'{$1=\"\"; print $0 }'"))
+         (first-candidate (if (equal "" grep-result)
+                              grep-result
+                            (string-match (concat "\\(" element "@@.+/[0-9]+\\)") grep-result)
+                            (match-string 1 grep-result)))
+         (zero-version (string-match "\\(.+/\\)\\([^/]+/0$\\)" first-candidate))
+         ;;(ten-version (string-match "\\(.+/\\)\\([0-9]0$\\)" first-candidate))
+         )
+    (ct-find-debug debug-buffer "ct-grep-for-first-version" 
+                   (list (list "inputfile" inputfile)
+                         (list "candidates" candidates) 
+                         (list "candidate" first-candidate)))
+    (if (equal "" grep-result)
+        (error "Unique String not found"))
+    (if zero-version
+        ;; "Go up one branch"
+        (ct-grep-for-first-version data (concat (match-string 1 first-candidate) "LATEST") debug-buffer)
+      ;;(if ten-version
+      ;;    ;; Search for first 9 version or first version
+      ;;    (if (string-match (make-shorter-version-regexp (match-string 1 first-candidate) (length (match-string 2 first-candidate))) grep-result)
+      ;;        (match-string 1 grep-result)
+      ;;      ;; Ten was first version
+      ;;      first-candidate
+      ;;      )
+      (if  (and inputfile (string-lessp (clearcase-fprop-date inputfile) (clearcase-fprop-date first-candidate)))
+          (error "Unique String only found in older version")
+        first-candidate
+        ))
+      ;;)
+))
+
+(defun ct-grep-for-last-version (data &optional inputfile pred-file)
+  "Finds the oldest clearcase version of current element where given strings is found, by using grep."
+  (interactive)
+  (let* ((file (if inputfile inputfile (get-pname)))
+         (element (clearcase-vxpath-element-part file))
+         (version (clearcase-vxpath-version-part file))
+         (dummy (string-match "\\(.+/\\)\\([^/]+\\)" version))
+         (version-number (match-string 2 version))
+         (candidates (concat element "@@" (match-string 1 version) "[0-9]*"))
+         ;;(grep-result (shell-command-to-string (concat "fgrep -nl \"" data "\" " candidates)))
+         ;;(grep-result (my-shell-cmd-to-string (concat "grep -nl -e \"" data "\" " candidates)))
+         (grep-result (mysh-blocking-call
+                       "grep" "-l" "-F" (concat "\"" data "\"") candidates
+                               "|" "awk" "'{print length, $0}'" "|" "sort" "-r" "-n" "|" "awk" "'{$1=\"\"; print $0 }'"))
+         (last-candidate (if (equal "" grep-result)
+                              nil
+                            (string-match (concat "\\(" element "@@.+/[0-9]+\\)") grep-result)
+                            (match-string 1 grep-result)))
+         (merged-to (if last-candidate (ct-find-merged-to-version last-candidate t)))
+         (merged-from (if last-candidate (ct-find-merged-from-version last-candidate)))
+         ;;(ten-version (string-match "\\(.+/\\)\\([0-9]0$\\)" first-candidate))
+         )
+
+    (if (not last-candidate)
+        ;; Not found - check if a previous branch exists
+        (if (string-match (concat "\\(" element "@@/.+/\\).+/[0-9]+") file)
+            ;; "Go up one branch"
+            (ct-grep-for-last-version data (concat (match-string 1 file) "0"))
+          ;; Not found
+          (error "Unique String not found"))
+      (if (and merged-to 
+               (not (equal "" (mysh-blocking-call "grep" "-l" "-F" (concat "\"" data "\"") merged-to))))
+          (ct-grep-for-last-version data merged-to last-candidate)
+        (if (and merged-from 
+                 (not (equal merged-from pred-file))
+                 (not (equal "" (mysh-blocking-call "grep" "-l" "-F" (concat "\"" data "\"") merged-from))))
+            (ct-grep-for-last-version data merged-from)
+          last-candidate))
+      )
+    ))
+
+(defun make-shorter-version-regexp (element version-length)
+  "Help fun used by `ct-grep-for-first-version' to make a clearcase version regexp, with one digit shorter."
+  (interactive)
+  (let ((version-string [])
+        (index 1))
+    (while (> version-length index)
+      (setq version-string (concat version-string "[0-9]"))
+      (setq index (+ 1 index)))
+    (concat "\\(" element version-string "$\\)")))
+
+;;(defun my-shell-cmd-to-string (cmd)
+;;  "Not sure if this is quicker than `shell-command-to-string'."
+;;  (let ((buf (get-buffer-create "mycmdexecution")))
+;;    (prog1
+;;        (save-excursion
+;;          (set-buffer buf)
+;;          (apply 'call-process "sh" nil buf nil (list "-c" cmd))
+;;          (buffer-string))
+;;      (kill-buffer buf))))
+
+(defun my-escape (data)
+  "Escapes special characters"
+  (interactive)
+  (replace-regexp-in-string "\\([)(\[ .\"-]\\)" "\\\\\\1" data))
+(defun my-unescape (data)
+  "Un-Escapes special characters"
+  (interactive)
+  (replace-regexp-in-string "\\\\\\([)(\[ .\"-]\\)" "\\1" data))
+
+;; Use tq for to start a shell command process - seems faster than shell-command-to-string. Copied from clearcase.el which has the same for cleartool commands
+(defvar mysh-tq nil
+  "Transaction queue to talk to ClearTool in a subprocess")
+(defvar mysh-return nil
+  "Return value when we're involved in a blocking call")
+(defconst mysh-subproc-timeout 30
+  "Timeout on calls to subprocess")
+(defconst mysh-eotxn-cmd "ls /bin/pwd\n")
+(defconst mysh-eotxn-response "/bin/pwd\n")
+(defconst mysh-eotxn-response-length (length mysh-eotxn-response))
+
+(defvar mysh-running nil)
+
+(defun mysh-quote-if-nec (token)
+  "If TOKEN contains whitespace and is not already quoted,
+wrap it in double quotes."
+  (if (and (string-match "[ \t]" token)
+           (not (equal ?\" (aref token 0)))
+           (not (equal ?\' (aref token 0))))
+      (concat "\"" token "\"")
+    token))
+
+(defun mysh-accept-process-output (proc timeout)
+  (accept-process-output proc timeout))
+
+(defun mysh-start-cleartool ()
+  (interactive)
+  (clearcase-trace "mysh-start-cleartool()")
+  (let ((process-environment (append '("ATRIA_NO_BOLD=1"
+                                       "ATRIA_FORCE_GUI=1")
+                                     ;;; emacs is a GUI, right? :-)
+                                     process-environment)))
+    (let* ( ;; Force the use of a pipe
+           ;;
+           (process-connection-type nil)
+           (tcsh-path (shell-command-to-string "echo -n `which \\tcsh`"))
+           (mysh-process (start-process "tcsh" " *mytcsh*" tcsh-path)))
+      
+      (set-process-query-on-exit-flag mysh-process nil)
+      (setq mysh-tq (tq-create mysh-process))
+      (tq-enqueue mysh-tq
+                  mysh-eotxn-cmd ;; question
+                  mysh-eotxn-response ;; regexp
+                  'mysh-running ;; closure
+                  'set) ;; function
+      (while (not mysh-running)
+        (message "waiting for mysh to start...")
+        (mysh-accept-process-output (tq-process mysh-tq)
+                                    mysh-subproc-timeout))
+      ;; Assign a sentinel to restart it if it dies.
+      ;; nyi: This needs debugging.
+      ;;(set-process-sentinel cleartool-process 'mysh-sentinel)
+      (message "waiting for mysh to start...done"))))
+
+
+(defun mysh-blocking-call (&rest cmd)
+  (save-excursion
+    (setq mysh-return nil)
+    (if (not mysh-tq)
+        (mysh-start-cleartool))
+    (unwind-protect
+        (let ((command ""))
+          ;;(mapcar
+          (mapc
+           (function
+            (lambda (token)
+              ;; If the token has imbedded spaces and is not already quoted,
+              ;; add double quotes.
+              ;;
+              (setq command (concat command
+                                    " "
+                                    (mysh-quote-if-nec token)))))
+           cmd)
+          (tq-enqueue mysh-tq
+                      (concat command "\n" mysh-eotxn-cmd) ;; question
+                      mysh-eotxn-response ;; regexp
+                      nil ;; closure
+                      'mysh-callback) ;; function
+          (while (not mysh-return)
+            (mysh-accept-process-output (tq-process mysh-tq)
+                                        mysh-subproc-timeout)))
+      ;; Error signalled:
+      ;;
+      (while (tq-queue mysh-tq)
+        (tq-queue-pop mysh-tq))))
+  (if (string-match "cleartool: Error:" mysh-return)
+      (error "cleartool process error %s: "
+             (substring mysh-return (match-end 0))))
+  mysh-return)
+
+
+(defun mysh-callback (arg val)
+  ;; This can only get called when the last thing received from
+  ;; the cleartool sub-process was mysh-eotxn-response,
+  ;; so it is safe to just remove it here.
+  ;;
+  (setq mysh-return (substring val 0 (- mysh-eotxn-response-length))))
+
+;;; End .emacs_ccase

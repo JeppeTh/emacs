@@ -1,0 +1,178 @@
+;; Xclearcase stuff
+
+;; Variable to indicate if a view is set or not.
+(defvar view-set nil)
+(if (is-windows)
+    (if (string-match "Clearcase" (getenv "PATH"))
+        (setq-default view-set ""))
+  (if (getenv "CLEARCASE_ROOT")
+      (setq-default view-set "[view]")
+    ))
+
+
+;; GIT
+
+(make-variable-buffer-local 'file-checkedout)
+(make-variable-buffer-local 'frame-title-format)
+(setq-default file-checkedout nil)
+(setq-default mode-line-buffer-identification '(file-checkedout "%b:CHECKEDOUT" "%b"))
+
+(defun my-autoload-git ()
+  (interactive)
+  (if (and (not (featurep 'mygit)) vc-mode)
+      (progn
+        (load-my-git)
+        (load ".emacs_git")
+        (revert-buffer nil t)
+        )
+    )
+  )
+(add-hook 'find-file-hooks 'my-autoload-git t)
+
+(defun load-my-git () 
+  (interactive)
+  (let* ((git-path (shell-command-to-string "which \\git"))
+         (git-alias (shell-command-to-string "which git"))
+         (git-bin-dir (if (string-match "Command not found" git-path)
+                          ;; Path not set - try alias
+                          (if (string-match "Command not found" git-alias)
+                              ;; We're smoked
+                              ""
+                            git-alias)
+                        ;; Path set
+                        git-path))
+         (git-root-dir (if (string-match "[^/]*\\(.+\\)/\\(bin\\|libexec/git-core\\)/git" git-bin-dir)
+                           (match-string 1 git-bin-dir)
+                         "")))
+   
+    (if (and (not (eq git-bin-dir "")) git-root-dir)
+        (progn
+          (add-to-list 'load-path (concat git-root-dir "/contrib/emacs"))
+          (require 'git)
+          (require 'git-blame)
+          )
+      )
+    )
+  )
+
+;; Clearcase
+(defun my-autoload-ccase (&optional force-load)
+  (interactive)
+  (if (and (not (featurep 'clearcase))
+           (or force-load
+               (and view-set
+                    (not (eq (string-match "^/vobs" default-directory) nil)))))
+      (let ((tmp-alist minor-mode-alist))
+        (cond ( (load "clearcase" 1 1)
+                (setq-default minor-mode-alist tmp-alist)
+                ;;(setq-default clearcase-complete-viewtags nil)
+                (add-hook 'find-file-hooks 'isfile-checkedout t)
+                (add-hook 'dired-after-readin-hook 'isfile-checkedout t)
+                (add-hook 'find-file-hooks 'ccase-title t)
+                (add-hook 'dired-after-readin-hook 'ccase-title t)
+                (add-hook 'clearcase-edcs-mode-hook 'my-clearcase-edcs-mode-hook t)
+                (autoload 'isfile-checkedout ".emacs_ccase")
+                (autoload 'ccase-title ".emacs_ccase")
+                (autoload 'my-clearcase-edcs-mode-hook ".emacs_ccase")
+                (cond ( (and clearcase-setview-viewtag
+                             (length clearcase-setview-viewtag))
+                        (if (> (length clearcase-setview-viewtag) 15)
+                            (let ((i (length clearcase-setview-viewtag)))
+                              (setq view-set
+                                    (concat "[..." 
+                                            (substring clearcase-setview-viewtag
+                                                       (- i 12))
+                                            "]")))
+                          (setq view-set (concat "[" clearcase-setview-viewtag "]"))))
+                      )
+                (if buffer-file-name
+                    (revert-buffer nil t))
+                )
+              )
+        )
+    )
+  )
+
+(add-hook 'find-file-hooks 'my-autoload-ccase t)
+(autoload 'lsco_avobs ".emacs_ccase" nil 1)
+(autoload 'ct-check-delivery ".emacs_ccase" nil 1)
+(global-set-key "\C-v"     'my-vc-version-tree)
+(global-set-key "\C-d"     'my-vc-ediff-pred-current-buffer)
+(global-set-key "\e\C-d"   'my-vc-ediff-other-current-buffer)
+(global-set-key "\C-o"     'my-vc-checkout-curr)
+(define-key esc-map "\C-x\C-f" 'my-vc-find-other-version)
+(define-key esc-map "\C-x\C-v" 'my-vc-find-alternate-version)
+(defun my-dired-mode-hook () (local-set-key "\C-o" 'checkout-curr))
+(add-hook 'dired-mode-hook 'my-dired-mode-hook t)
+
+(defun is-clearcase ()
+  "Check if clearcase-mode is used"
+  (and (boundp 'clearcase-mode)
+       (or clearcase-mode clearcase-dired-mode)))
+
+(defun my-vc-version-tree ()
+  "Show version tree of visited buffer"
+  (interactive)
+  (if (is-clearcase)
+      (xlsvtree-curr)
+    (magit-log-buffer-file)
+    ))
+
+(defun my-vc-checkout-curr ()
+  "Checkout clearcase file or make git-file writable."
+  (interactive)
+  (if (is-clearcase)
+      (checkout-curr)
+    (my-git-checkout-curr)
+    ))
+
+(defun my-vc-uncheckout-curr ()
+  "Uncheckout version in current buffer and keep private data."
+  (interactive)
+  (if (is-clearcase)
+      (uncheckout-curr)
+    (my-git-uncheckout-curr)))
+
+(defun my-vc-ediff-pred-current-buffer ()
+  "Diff current buffer towards prior version depending on ClearCase or GIT."
+  (interactive)
+  (if (is-clearcase)
+      (if clearcase-mode
+          (clearcase-ediff-pred-current-buffer)
+        (if clearcase-dired-mode
+            (clearcase-ediff-pred-dired-file)))
+    (my-git-ediff-pred-current-buffer)))
+
+
+(defun my-vc-ediff-other-current-buffer ()
+  "Diff current buffer towards other version depending on ClearCase or GIT."
+  (interactive)
+  (if (is-clearcase)
+      (if clearcase-mode
+          (call-interactively 'clearcase-ediff-named-version-current-buffer)
+        (if clearcase-dired-mode
+            (call-interactively 'clearcase-ediff-named-version-dired-file)))
+    (my-git-ediff-other-version)))
+
+(defun my-vc-find-other-version ()
+  "Find other version of current buffer depending on ClearCase or GIT."
+  (interactive)
+  (if (is-clearcase)
+      (call-interactively 'ccase-find-other-version)
+    (my-git-find-other-version)))
+
+(defun my-vc-find-alternate-version ()
+  "Replavce current buffer with other version depending on ClearCase or GIT."
+  (interactive)
+  (if (is-clearcase)
+      (call-interactively 'ccase-find-alternate-version)
+    (my-git-find-alternate-version)))
+
+(defun my-vc-expand-file-name-with-version (name)
+  "Extends given name with @@<version> when appropriate"
+  (interactive)
+  (if (and (is-clearcase) (not dired-directory) (clearcase-file-covers-element-p name))
+      (clearcase-vxpath-version-extend name)
+    (if (and (featurep 'mygit) (not (is-clearcase)))
+        (my-git-expand-file-name-with-version name)
+      name)))

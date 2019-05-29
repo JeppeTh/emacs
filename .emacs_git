@@ -1,0 +1,330 @@
+(add-hook 'find-file-hooks 'my-git-title t)
+(add-hook 'find-file-hooks 'my-git-file-status t)
+(add-hook 'dired-after-readin-hook 'my-git-title t)
+
+(add-to-list 'load-path "~/.emacs.d/site-lisp/magit/lisp")
+
+(provide 'mygit)
+
+;; Magit settings
+(cond ( (require 'magit nil t)
+
+        (require 'magit-ediff)
+
+        (with-eval-after-load 'info
+          (info-initialize)
+          (add-to-list 'Info-directory-list
+                       "~/.emacs.d/site-lisp/magit/Documentation/"))
+
+        (magit-auto-revert-mode -1)
+        (setq magit-log-arguments  (append magit-log-arguments (list "--no-merges") (list "--follow")))
+        (set-face-foreground 'magit-blame-heading "lightgrey")
+        (add-hook 'magit-ediff-quit-hook  'my-ediff-quit t)
+        (remove-hook 'magit-ediff-quit-hook 'magit-ediff-restore-previous-winconf)
+        (add-hook 'magit-find-file-hook 'my-git-title t)
+        (add-hook 'magit-find-file-hook 'ipa-load-annotations-into-buffer t)
+        (add-hook 'magit-status-mode-hook 'my-magit-status-mode-hook)
+        (add-hook 'magit-log-mode-hook 'my-magit-log-mode-hook)
+        (add-hook 'magit-revision-sections-hook (lambda (TAG) 
+                                                  (interactive) 
+                                                  (local-set-key [(control tab)] 'magit-section-cycle-diffs)
+                                                  (local-set-key [(control return)] 'my-git-show-commit-at-point)))
+        (global-set-key "\C-xvs" 'magit-status)
+        (global-set-key "\C-xv?" 'magit-log-buffer-file)
+        (define-key magit-blame-mode-map "e"      'my-git-blame-ediff)
+        (define-key magit-blame-mode-map "b"      'magit-blame)
+        (define-key magit-blame-mode-map [return] 'my-git-blame-open-version)
+        (define-key magit-blame-mode-map [(control return)] 'my-git-blame-open-prior-version)
+        ))
+
+(defun my-git-file-at-point ()
+  (interactive)
+  (let* ((file-at-point (magit-current-file))
+         (file-at-point (if (not file-at-point) (ffap-string-at-point) file-at-point)))
+    file-at-point))
+
+(defun my-git-show-commit-at-point ()
+  (interactive)
+  (magit-show-commit (magit-commit-at-point)))
+
+(defun my-git-ediff-pred-at-point ()
+  (interactive)
+  (let* ((file-at-point (my-git-file-at-point))
+         (buffer-at-point (get-file-buffer file-at-point)))
+    ;;(if (and buffer-at-point (not (verify-visited-file-modtime buffer-at-point)))
+    ;;    (with-current-buffer buffer-at-point
+    ;;      (revert-buffer)))
+    (magit-ediff-show-working-tree file-at-point)))
+
+(defun my-magit-status-mode-hook ()
+  (interactive)
+  (local-set-key  "e"      'my-git-ediff-pred-at-point)
+  (local-set-key  "\C-d"   'my-git-ediff-pred-at-point)
+  (local-set-key  "\e\C-d" 'my-git-ediff-other-version-at-point)
+  (local-set-key  "\C-f"   'magit-ediff-resolve)
+  )
+
+(defun my-magit-log-mode-hook ()
+  (interactive)
+  (local-set-key [return]  'my-git-find-file-at-commit))
+
+(defun my-git-find-file-at-commit ()
+  (interactive)
+  (let ((commit (magit-commit-at-point)))
+    (magit-find-file commit
+                     (my-git-get-filename-for-rev (magit-current-file) commit))))
+
+;; Misc functions...
+(defvar my-git-baseline nil "Baseline in git-changes buffer")
+(defun my-git-list-changed-files (prefix)
+  (interactive "P")
+  (if (get-buffer "git-changes")
+      (kill-buffer "git-changes"))
+  (let* ((baseline (replace-regexp-in-string "\\.+$" "" (magit-read-branch-or-commit "Compare with:" "origin/master")))
+         (afterdate (if prefix nil (shell-command-to-string (concat "git log -1 `git merge-base " baseline " HEAD` --format=\"%cd\""))))
+         (log-args (if afterdate (append magit-log-arguments (list (concat "--after=\"" afterdate "\""))) magit-log-arguments))
+         )
+    ;;(magit-log (list (concat baseline "..HEAD")) (append magit-log-arguments  '("--no-merges" "--ancestry-path")))
+    (magit-log (list (concat baseline "..")) log-args)
+    (rename-buffer "git-changes")
+    ;; Avoid buffer beeing re-used for other magit commands
+    (setq magit-buffer-locked-p t)
+    ;;(set-buffer (generate-new-buffer "git-changes"))
+    ;;(magit-status-mode)
+    (goto-char (point-max))
+    (read-only-mode -1)
+    ;;(setq buffer-read-only nil)
+    (insert "\n\n")
+    (insert (mapconcat 'identity (magit-changed-files (concat baseline "...")) "\n"))
+    (cd (magit-toplevel))
+    (switch-to-buffer "git-changes")
+    (goto-char (point-min))
+    (set (make-local-variable 'my-git-baseline) baseline)
+    ;; local-set-key is tricky - it's not local buffer - it's local key-map
+    ;;(use-local-map (copy-keymap local-function-key-map))
+    (use-local-map (copy-keymap (current-local-map)))
+    (local-set-key "e" (lambda()
+                         (interactive)
+                         (if (magit-branch-or-commit-at-point)
+                             (magit-ediff-dwim)
+                           (magit-ediff-compare (car (magit-split-range (concat my-git-baseline "..."))) nil (ffap-string-at-point) (ffap-string-at-point)))))
+    (local-set-key [S-return] 'my-find-file-at-point)
+    (local-set-key [C-return] 'my-find-file-at-point)
+    ))
+
+(defun git-man (entry)
+  (interactive (list (read-string "git help entry: ")))
+  (let ((newbuffer  (concat "*Git Help " entry "*"))
+        (this-buffer (get-buffer (buffer-name))))
+    (if (not (get-buffer newbuffer))
+        (progn
+          (man (concat "git-" entry))
+          (switch-to-buffer (concat "*Man git-" entry "*") t)
+          (rename-buffer newbuffer)
+          (switch-to-buffer this-buffer t)))
+    (switch-to-buffer-other-window newbuffer)))
+
+(defun is-git-reference ()
+  (and (boundp 'magit-buffer-refname) (not (eq magit-buffer-refname nil))))
+
+(defun my-is-in-git ()
+  (interactive)
+  (let ((my-buffer-name (my-get-buffer-file-name)))
+    (or
+     (is-git-reference)
+     (and my-buffer-name 
+          (not (eq (vc-working-revision my-buffer-name) nil)))
+   )))
+  
+
+(defun my-git-title ()
+  (let* ((my-buffer-name (my-get-buffer-file-name))
+         (ver-string (if (is-git-reference)
+                         magit-buffer-refname
+                       (if my-buffer-name
+                           (vc-working-revision my-buffer-name)
+                         nil))))
+    (cond (ver-string
+           (setq frame-title-format ver-string)
+           (if (is-git-reference)
+               (let ((new-name (concat (file-relative-name magit-buffer-file-name) "@@" ver-string)))
+                 (if (get-buffer new-name) (kill-buffer new-name))
+                 (rename-buffer new-name)
+                 ))
+           ))))
+
+(defun my-git-file-status (&rest args)
+  (cond ( (and (my-is-in-git) (not (is-git-reference)))
+          (if (eq (vc-git-state buffer-file-name) 'up-to-date)
+              (read-only-mode (not (setq file-checkedout nil)))
+            (setq file-checkedout 1)
+            )
+          (force-mode-line-update)
+          )
+        )
+  )
+
+(defun is-in-my-git-workspace ()
+  (let* ((target (my-get-buffer-file-name))
+         (gsn_ws_root (getenv "GSN_WS_ROOT"))
+         (gsn_git_root (replace-regexp-in-string (concat "/" (user-login-name) ".*") "" gsn_ws_root))
+         )
+    (and
+     target
+     (my-is-in-git)
+     (or (not (string-match gsn_git_root target))
+         (and gsn_ws_root
+              (or (not (boundp 'clearcase-setview-viewtag))
+                  (string-match (concat "/" clearcase-setview-viewtag "\\(/.+\\)?$") gsn_ws_root))
+              (string-match gsn_ws_root target)
+              ))
+     )))
+
+(defun my-git-get-buffer-file-name (&optional rev)
+  (let ((file  (if (buffer-file-name)
+                   buffer-file-name
+                 ;; This is when visiting another version of a file
+                 magit-buffer-file-name))
+        (current-rev (if (buffer-file-name) nil magit-buffer-refname))
+        )
+    (if rev
+        (my-git-get-filename-for-rev file rev current-rev)
+      file)))
+
+(defun my-git-get-filename-for-rev (file rev &optional current-rev)
+  "Tries to determine the name of the file in the specific rev (to handle renames...)."
+  (let* ((current-rev (if current-rev current-rev "HEAD"))
+         (file (file-relative-name file (magit-toplevel)))
+         (file (if (member file (magit-revision-files rev))
+                   ;; File exists in rev
+                   file
+                 (if (rassoc file (magit-renamed-files rev current-rev))
+                     ;; File has been renamed in older rev
+                     (car (rassoc file (magit-renamed-files rev current-rev)))
+                   ;; Don't know...
+                   file
+                   ))))
+    (concat (magit-toplevel) file)))
+
+
+(defun my-git-checkout-curr ()
+  (cond ( (and (is-in-my-git-workspace)
+               (not file-checkedout)
+               )
+          (read-only-mode -1)
+          ;;(setq buffer-read-only nil)
+          (setq file-checkedout 1)
+          (force-mode-line-update)
+          )
+        ( file-checkedout
+          (error "Already checkedout")
+          )
+        ( (is-git-reference)
+          (error "This is just a reference buffer")
+          )
+        ( (my-is-in-git)
+          (error "Wrong workspace")
+          )
+        ( t
+          (error "Not a GIT File")
+          )
+        ))
+
+(defun my-git-uncheckout-curr ()
+  (interactive)
+  (cond ( (is-in-my-git-workspace)
+          (if (is-windows)
+              (shell-command (concat "copy /Y " buffer-file-name " " buffer-file-name ".keep"))
+            (shell-command (concat "\\cp --backup=numbered " buffer-file-name " " buffer-file-name ".keep")))
+          (shell-command (concat "git checkout -- " buffer-file-name) nil nil)
+          (revert-buffer nil t)
+          )))
+
+(defun my-git-get-other-version ()
+  (car (magit-ediff-compare--read-revisions (magit-read-branch-or-commit "Other version"))))
+
+(defun my-git-blame-ediff ()
+  "Ediff current-buffer against current \"blame\"."
+  (interactive)
+  (let* ((this-version (magit-blame-chunk-get :hash))
+         (other-version (magit-blame-chunk-get :previous-hash))
+         )
+    (my-git-ediff-other-version other-version this-version)))
+
+(defun my-git-blame-open-version ()
+  "Open \"blame\" version of current-buffer."
+  (interactive)
+  (my-git-blame-open :hash))
+
+(defun my-git-blame-open (hash)
+  "Open \"blame\" version of current-buffer."
+  (interactive)
+  (let ((linenum (1+ (count-lines 1 (point-at-bol))))
+        (rev (magit-blame-chunk-get hash)))
+    (if (not rev)
+        (error "No such version"))
+    (my-git-find-other-version rev)
+    (goto-char (point-min)) (forward-line (1- linenum))
+    (recenter-top-bottom)))
+
+(defun my-git-blame-open-prior-version ()
+  "Open \"blame\" prior version of current-buffer."
+  (interactive)
+  (my-git-blame-open :previous-hash))
+
+(defun my-git-ediff-pred-current-buffer ()
+  (interactive)
+  (if magit-buffer-revision
+      (my-git-ediff-other-version (concat magit-buffer-revision "^"))
+    (magit-ediff-show-working-tree (if buffer-file-name buffer-file-name magit-buffer-refname))))
+
+(defun my-git-ediff-other-version (&optional other-version this-version file)
+  "Ediff current-buffer with selected version"
+  (interactive)
+  (let ((this-version (if this-version this-version (if (buffer-file-name) nil magit-buffer-refname)))
+        (other-version (if other-version other-version (my-git-get-other-version)))
+        )
+    (magit-ediff-compare other-version
+                         this-version
+                         (my-git-get-buffer-file-name other-version)
+                         (my-git-get-buffer-file-name this-version))))
+
+(defun my-git-ediff-other-version-at-point ()
+  "Ediff file-at-point with selected version"
+  (interactive)
+  (my-git-ediff-other-version (my-git-get-other-version) nil (my-git-file-at-point)))
+
+(defun my-git-find-other-version (&optional version)
+  "Open other version of current file"
+  (interactive)
+  (let ((version (if version version (my-git-get-other-version))))
+    (magit-find-file version (my-git-get-buffer-file-name version))))
+
+(defun my-git-insert-version ()
+  "Inserts other version of current file into current buffer"
+  (interactive)
+  (let* ((other-buffer (magit-find-file-noselect (my-git-get-other-version)
+                                                 buffer-file-name)))
+         ;;(other-content (with-current-buffer other-buffer (buffer-string))))
+    (read-only-mode -1)
+    (erase-buffer)
+    (insert-buffer-substring other-buffer)
+    (kill-buffer other-buffer)))
+
+(defun my-git-find-alternate-version ()
+  "Replavce current buffer with other version."
+  (interactive)
+  (let ((old-buffer (buffer-name)))
+    (my-git-find-other-version)
+    (kill-buffer old-buffer)))
+
+(defun my-git-expand-file-name-with-version (name)
+  (if (my-is-in-git)
+      (let ((version (if magit-buffer-revision
+                         magit-buffer-revision
+                       (if magit-buffer-refname
+                           magit-buffer-refname
+                         (magit-rev-parse "HEAD"))))
+            (name    (replace-regexp-in-string (getenv "GSN_WS_ROOT") "$GSN_WS_ROOT" name)))
+        (replace-regexp-in-string "\\([^@]+\\)\\(@@.+\\)?$" (concat "\\1@@" version) name))
+    name))

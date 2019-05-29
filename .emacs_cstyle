@@ -1,0 +1,200 @@
+;; C-style definition file, .emacs_cstyle
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Define my-c-style
+(require 'cc-vars)
+(defconst my-c-style    
+  '((c-basic-offset . 4)
+    (c-comment-only-line-offset . (0 . 0))
+    (c-offsets-alist . (
+                        (substatement-open . 0)
+                        (arglist-cont-nonempty . c-lineup-arglist-intro-after-paren)
+                        (innamespace . 0)
+                        (inline-open . 0)
+                        (case-label . +)
+                        (inextern-lang . 0)
+                        ))
+     (c-special-indent-hook . c-gnu-impose-minimum)
+     (c-comment-continuation-stars . "")
+     (c-hanging-comment-ender-p . t)
+     )
+  "My C/C++ Programming Style")
+
+(c-add-style "my-c-style" my-c-style)
+;; Set as default c-style
+(setq-default c-default-style "my-c-style")
+
+;; Define my-idl-style
+(defconst my-idl-style
+  '((c-basic-offset . 2)
+    (c-comment-only-line-offset . (0 . 0))
+    (c-offsets-alist . (
+                        (substatement-open . 0)
+                        (arglist-cont-nonempty . c-lineup-arglist-intro-after-paren)
+                        (innamespace . 0)
+                        (inline-open . 0)
+                        (case-label . +)
+                        (inextern-lang . 0)
+                        (brace-list-open . +)
+                        ))
+     (c-special-indent-hook . c-gnu-impose-minimum)
+     (c-comment-continuation-stars . "")
+     (c-hanging-comment-ender-p . t)
+     )
+  "My IDL Programming Style")
+
+(c-add-style "my-idl-style" my-idl-style)
+
+(setq-default c-label-minimum-indentation c-basic-offset)
+;; In case we want to use tabs for indentation
+;  (setq-default tab-width c-basic-offset)
+
+(defun my-c-mode-hook ()
+  (interactive)
+  (local-set-key "\ea"       'backward-sexp)
+  (local-set-key "\ee"       'forward-sexp)
+  (local-set-key "\C-m"      'manual-entry)
+  (local-set-key [return]    'newline-and-indent)
+  (local-set-key [delete]    'delete-char)
+  (local-set-key [backspace] 'delete-backward-char)
+  (local-set-key "\C-d"      'my-vc-ediff-pred-current-buffer)
+  (local-set-key "\e\C-d"    'my-vc-ediff-other-current-buffer)
+  (if (string-match "XEmacs" emacs-version)
+      (local-set-key [(shift return)]  'newline)
+    (local-set-key [S-return]  'newline))
+
+  (turn-on-auto-fill)
+  (setq auto-fill-function 'do-auto-fill)
+  (setq fill-column 80)
+
+  (if (eq major-mode 'c++-mode)
+      ;; Make it possible to get Class::member as default tag in C++
+      (modify-syntax-entry ?: "_"))
+  (c-set-style c-default-style))
+
+(defvar my-idl-imenu-generic-expression
+  `(
+    ;; General function name regexp
+    (nil ,(concat "[^a-zA-Z0-9_:<>~]"                ; match any non-identifier char
+                  "\\([a-zA-Z_][a-zA-Z0-9_:<>~]*\\)" ; match function name
+                  "[ \t]*("			     ; see above, BUT
+                  "[ \t]*\\([^ \t(*][^)]*\\)?)"      ; the arg list must not start
+                  "[ \t]*[^ \t(]*;"                  ; with an asterisk or parentheses
+                  ) 1)
+
+    ;; Unions
+    (nil ,(concat "[^a-zA-Z0-9_:<>~]"                ; match any non-identifier char
+                  "union[ \t]+"                      ; Find declaration
+                  "\\([a-zA-Z0-9_]+\\)"              ; the string we want to get
+                  "[ \t]+switch[ \t]*([a-zA-Z0-9_: \t\n]*)[ \t]{") 1)
+
+    ;; Typedefs
+    (nil ,(concat "[^a-zA-Z0-9_:<>~]"                ; match any non-identifier char
+                  "typedef[ \t]+"                    ; Find declaration
+                  "[a-zA-Z0-9_:<>, \t]*[ \t]+"       ; Find type
+                  "\\([a-zA-Z0-9_]+\\)"              ; the string we want to get
+                  "[ \t\n]*;") 1)
+
+    ;; enum, interface, struct, exception and module definitions
+    (nil ,(concat 
+           "[^a-zA-Z0-9_:<>~]"                    ; match any non-identifier char
+           "\\(enum\\|interface\\|struct\\|exception\\|module\\)[ \t]+" ; Find declaration
+           "\\("
+           "[a-zA-Z0-9_]+\\)"                     ; the string we want to get
+           "[ ,:a-zA-Z0-9]*[ \t\n]*{") 2)
+
+    ;; "members"
+    (nil ,(concat  "[^a-zA-Z0-9_:<>~]"               ; match any non-identifier char
+                   "\\([a-zA-Z0-9_:]+[ \t]+\\)+"     ; Find declaration
+                   "\\("
+                   "[a-zA-Z0-9_]+\\)"                ; the string we want to get
+                   "[ \t]*;") 2))
+
+  "Imenu generic expression for IDL mode.  See `imenu-generic-expression'.")
+
+(defun my-idl-mode-hook ()
+  (interactive)
+  (local-set-key "\ea"       'backward-sexp)
+  (local-set-key "\ee"       'forward-sexp)
+  (local-set-key [return]    'newline-and-indent)
+  (local-set-key [delete]    'delete-char)
+  (local-set-key [backspace] 'delete-backward-char)
+  ;;(local-set-key "\C-d"      'xdiff-previous)
+  (if (string-match "XEmacs" emacs-version)
+      (local-set-key [(shift return)]  'newline)
+    (local-set-key [S-return]  'newline))
+
+  (turn-on-auto-fill)
+  (setq auto-fill-function       'do-auto-fill)
+  (setq fill-column              80)
+  (setq imenu-generic-expression my-idl-imenu-generic-expression)
+  (add-to-list 'which-func-modes       'idl-mode)
+;  (modify-syntax-entry ?: "_") ;; No support for class::member
+
+  ;; Copied font-lock settings from c++-mode
+  (set (make-local-variable 'font-lock-defaults)
+       '((c++-font-lock-keywords c++-font-lock-keywords-1 
+                                 c++-font-lock-keywords-2 c++-font-lock-keywords-3)
+         nil nil ((?_ . "w")) beginning-of-defun
+         (font-lock-mark-block-function . mark-defun)))
+  (font-lock-mode 1)
+
+  (c-set-style "my-idl-style"))
+
+;; Doxygen documentation (Java Doc Style)
+(defun java-comment-region (beg end &optional arg)
+  (interactive "r\nP")
+  (let ((org-comment-start comment-start))
+    (cond ( (eq major-mode 'c++-mode)
+            (setq comment-start "///")))
+
+    (comment-region beg end arg)
+    (if (eq major-mode 'c++-mode)
+        (setq comment-start org-comment-start))))
+
+(defun insert-progfile-header ()
+    (interactive)
+    (insert "/* -*- C++ -*-
+********************************************************************************
+* COPYRIGHT Ericsson AB 2002
+*
+* The copyright to the computer program(s) herein is the property of
+* Ericsson AB, Sweden.
+* The program(s) may be used and/or copied only with the written permission
+* from Ericsson AB or in accordance with the terms and conditions stipulated
+* in the agreement/contract under which the program(s) have been supplied.
+*******************************************************************************/
+
+/**
+ * \\file           xxx.hh
+ *
+ * \\brief          Short description of what the file contains and its purpose.
+ *
+ * Possibly a longer description.
+ *
+ * \\author         ervxxxx
+ *
+ */
+
+#ifndef FILENAME_HH
+#define FILENAME_HH
+
+// *****************************************************************************
+//
+//  Include Files
+//
+// *****************************************************************************
+
+
+
+// *****************************************************************************
+//
+//  Declarations
+//
+// *****************************************************************************
+
+#endif
+")
+)
+
+;;; End .emacs_cstyle

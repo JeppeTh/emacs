@@ -1,0 +1,685 @@
+;; emacs specific file, .emacs_emacs
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(autoload 'View-back-to-mark "view")
+(autoload 'comint-dynamic-complete "comint")
+(autoload 'term-dynamic-complete "term")
+
+;; Disable tool bar mode.
+(if (>= emacs-major-version 21)
+    (progn (tool-bar-mode -1)
+           (blink-cursor-mode -1)
+           (normal-erase-is-backspace-mode -1)))
+
+;; If no DISPLAY is set, swap Delete and Backspace
+;; Otherwise Backspace will work as the help-character C-h.
+(if (and (is-unix) (not (getenv "DISPLAY")))
+    (load "term/bobcat.el"))
+
+;; Turn on delete selection mode
+(delete-selection-mode 1)
+
+;; Find-file with wildcard
+(if (< emacs-major-version 24)
+    (partial-completion-mode 1)
+  (defvar partial-completion-mode nil))
+
+;; Visuell markering
+(setq-default transient-mark-mode t)
+(setq-default tags-revert-without-query 1)
+(setq-default which-func-unknown nil)
+(setq-default imenu-max-item-length nil)
+
+;; Key Bindings
+(global-set-key "\e."      'my-find-tag)
+(global-set-key "\e,"      'find-next-tag)
+(global-set-key [?\C-\M-,] 'find-next-tag-regexp)
+(global-set-key [mouse-2]  'my-mouse-yank)
+(global-set-key [S-down]   'my-mark-down)
+(global-set-key [S-up]     'my-mark-up)
+(global-set-key [S-left]   'my-mark-left)
+(global-set-key [S-right]  'my-mark-right)
+(global-set-key [mouse-4]  'scroll-down)
+(global-set-key [mouse-5]  'scroll-up)
+(global-set-key [?\C-.]    'my-imenu)
+(global-set-key [?\C-,]    'my-imenu-next)
+(global-set-key [?\C-*]    'View-back-to-mark) ; pop imenu-mark
+
+;; Problems with Ctrl-Alt and AltGr on different environments...
+(global-set-key "\\" 'my-indent-region)
+(global-set-key "\M-\\" 'my-indent-region)
+(global-set-key [?\C-\M-+] 'my-indent-region)
+
+(defun my-indent-region ()
+  (interactive)
+  (if mark-active
+      (progn
+        (call-interactively 'indent-region)
+        (deactivate-mark))
+    (call-interactively 'self-insert-command)))
+
+;; Tags
+(load ".emacs_tags")
+
+;; Ediff
+(require 'ediff)
+
+(defun foreach-ediff-buffer (callback)
+  (dolist (b (list 'A 'B 'C))
+    (let* ((an-ediff-buffer (ediff-get-buffer b)))
+      (if an-ediff-buffer
+          (funcall callback an-ediff-buffer)))))
+
+(add-hook 'ediff-before-setup-hook
+          '(lambda ()
+             (if (ediff-same-file-contents file-A file-B)
+                 (error "No diff")
+               (if (not (get-register ?e))
+                   (frameset-to-register ?e))
+               )))
+
+(add-hook 'ediff-prepare-buffer-hook 
+          '(lambda() 
+             ;; Check if buffer needs revert,
+             (if (not (verify-visited-file-modtime (current-buffer)))
+                 (revert-buffer))
+             ;; Determine how to display trailing ws,
+             (setq show-trailing-whitespace (not ediff-ignore-similar-regions))
+             ))
+
+(defadvice ediff-toggle-skip-similar
+  (after my-ediff-toggle-show-trailing ())
+  "Advice function for `ediff-toggle-skip-similar' to let 
+`show-trailing-whitespace' follow its settings."
+  (let ((skip-spaces ediff-ignore-similar-regions))
+    (foreach-ediff-buffer
+     (lambda (an-ediff-buffer)
+       (with-current-buffer an-ediff-buffer
+         (setq show-trailing-whitespace (not skip-spaces))))))
+  ad-return-value
+  )
+(ad-activate 'ediff-toggle-skip-similar)
+
+(defun my-ediff-ipa-insert  (arg &optional key)
+  "`ipa-insert' during Ediff.
+If the second optional argument, a character, is given, use it to
+determine the target buffer."
+  (interactive "P")
+  (let* ((org-buffer (buffer-name))
+         (ediff-buffer (ediff-get-buffer (ediff-char-to-buftype (or key (ediff-last-command-char)))))
+         (org-return-cmd (progn (pop-to-buffer ediff-buffer) (key-binding [return] t)))
+         (org-c-return-cmd (key-binding [C-return] t))
+         (org-del-cmd (key-binding [delete] t))
+         (org-quit-cmd (key-binding [return] t))
+         )
+    (local-set-key [return] (lambda() (interactive) (ipa-insert) (exit-recursive-edit)))
+    (local-set-key [C-return] (lambda() (interactive) (ipa-edit) (exit-recursive-edit)))
+    (local-set-key [delete] (lambda() (interactive) (ipa-remove) (exit-recursive-edit)))
+    (local-set-key "\C-g" 'exit-recursive-edit)
+    (recursive-edit)
+    (local-set-key [return] org-return-cmd)
+    (local-set-key [C-return] org-c-return-cmd)
+    (local-set-key [delete] org-del-cmd)
+    (local-set-key "\C-g" org-quit-cmd)
+    (pop-to-buffer org-buffer)))
+
+
+(defun my-ediff-startup-hook ()
+  (if (< emacs-major-version 21)
+      (run-hooks 'ediff-before-setup-hook))
+
+  (if (fboundp 'set-frame-parameter)
+      (set-frame-parameter nil 'fullscreen 'maximized)
+      ;;(set-frame-parameter nil 'fullscreen 'fullheight)
+    (set-frame-height (selected-frame) 70))
+  (ediff-toggle-wide-display)
+  (if (eq ediff-split-window-function 'split-window-vertically)
+      (ediff-toggle-split))
+  (define-key ediff-mode-map "i"  nil)
+  (define-key ediff-mode-map "ia" 'my-ediff-ipa-insert)
+  (define-key ediff-mode-map "ib" 'my-ediff-ipa-insert)
+  (define-key ediff-mode-map "ic" 'my-ediff-ipa-insert)
+  (local-set-key "\C-r" 'ediff-revert-buffers-then-recompute-diffs)
+  ;;(let ((top-pos  (- (frame-parameter nil `top) 22)))
+  ;;  (ediff-toggle-wide-display)
+  ;;  (set-frame-position (selected-frame) (- (frame-parameter nil `left) 3) top-pos)
+  ;;  (ediff-toggle-split)))
+  )
+
+(add-hook 'ediff-startup-hook 'my-ediff-startup-hook t)
+
+;;(defun my-ediff-quit-hook ()
+;;  (let ((top-pos  (- (frame-parameter nil `top) 22)))
+;;    (ediff-toggle-wide-display)
+;;    (set-frame-position (selected-frame) (- (frame-parameter nil `left) 3) top-pos)
+;;    (ediff-toggle-split))
+
+;;  (let ((buffer-B ediff-buffer-B)
+;;        (buffer-A ediff-buffer-A))
+;;        (ediff-cleanup-mess)
+;;        (ediff-kill-buffer-carefully buffer-A)
+;;        (switch-to-buffer buffer-B)
+;;        (ediff-strip-mode-line-format)
+;;        (delete-other-windows))
+;;)
+
+;;(add-hook 'ediff-quit-hook  'my-ediff-quit-hook t)
+
+(defun my-ediff-cleanup ()
+  (foreach-ediff-buffer
+   (lambda (an-ediff-buffer)
+     (with-current-buffer an-ediff-buffer
+       (setq show-trailing-whitespace (not buffer-read-only)))))
+  )
+(add-hook 'ediff-cleanup-hook 'my-ediff-cleanup t)
+
+
+(defun my-ediff-quit ()
+  (if (get-register ?e)
+      (progn
+        (jump-to-register ?e)
+        (set-register ?e nil)
+        ))
+  )
+(add-hook 'ediff-quit-hook 'my-ediff-quit t)
+
+; Search mode
+(define-key isearch-mode-map [backspace] 'isearch-delete-char)
+(define-key isearch-mode-map [delete]    'isearch-delete-char)
+(define-key isearch-mode-map "\C-y"      'isearch-yank-line)
+
+;; Display
+(show-paren-mode t)
+(which-function-mode t)
+(setq-default font-lock-maximum-size 1000000)
+
+; Turn on font-lock in all modes that support it
+(global-font-lock-mode t)
+
+; Colors
+(set-face-background 'default'  "black")
+(set-face-foreground 'default'  "white")
+(set-background-color           "black")
+(set-foreground-color           "white")
+(set-cursor-color               "white")
+(set-mouse-color                "white")
+(if (< emacs-major-version 21)
+    (progn
+      (set-face-background 'modeline' "white")
+      (set-face-foreground 'modeline' "black")
+      )
+  (set-face-background 'mode-line' "white")
+  (set-face-foreground 'mode-line' "black")
+  )
+(set-face-background 'region'   "blue")
+
+(set-face-foreground 'font-lock-comment-face' "orangered")
+(set-face-foreground 'font-lock-keyword-face' "cyan")
+(set-face-foreground 'font-lock-string-face' "LightSalmon")
+(set-face-foreground 'font-lock-function-name-face' "LightSkyBlue")
+(set-face-foreground 'font-lock-type-face' "PaleGreen")
+(set-face-foreground 'font-lock-builtin-face' "LightSteelBlue")
+(set-face-foreground 'font-lock-constant-face' "Aquamarine")
+(set-face-foreground 'font-lock-warning-face' "Pink")
+(set-face-foreground 'font-lock-variable-name-face' "LightGoldenrod")
+(if (require 'whitespace nil t)
+    (set-face-background 'whitespace-tab' "Pink"))
+
+; Use other region color in search-mode
+(cond ( (>= emacs-major-version 21)
+        (set-face-background 'isearch'  "dim gray")
+        (set-face-foreground 'isearch'  "white")
+;        (set-face-background 'isearch-lazy-highlight-face' "black")
+        (set-face-background 'isearch-lazy-highlight-face' nil)
+        (set-face-foreground 'isearch-lazy-highlight-face' "dim gray")
+      )
+
+      ( (< emacs-major-version 21)
+        (defun my-isearch-hook ()
+          (set-face-background 'region'  "DimGray")
+          (set-face-foreground 'region'  "white")
+        )
+        (add-hook 'isearch-mode-hook 'my-isearch-hook)
+
+        (defun my-isearch-end-hook ()
+          (set-face-background 'region'  "blue")
+          (set-face-foreground 'region'  nil)
+        )
+        (add-hook 'isearch-mode-end-hook 'my-isearch-end-hook)
+      )
+)
+
+;(defun my-term-mode-hook ()
+;  (set-face-background 'default'  nil)
+;  (set-face-foreground 'default'  nil)
+;  )emacs
+;(add-hook 'term-mode-hook 'my-term-mode-hook)
+
+
+; Don't signal when copying from read-only files
+(setq-default kill-read-only-ok t)
+
+(defun my-paste-from-x-selection (&optional selection)
+  "Paste from x-selection, default from PRIMARY"
+  (interactive)
+  (if (and mark-active) (call-interactively 'delete-region))
+  (insert (x-get-selection selection)))
+
+;; Since VNC uses cut-buffer, use own paste-functionality
+(if (and (getenv "VNCDESKTOP") (getenv "DISPLAY"))
+    (setq-default interprogram-paste-function 'my-x-cut-buffer-or-selection-value))
+;; My own functions
+;;;;;;;;;;;;;;;;;;;
+;;; Return the value of the current X selection.
+;;; Consult the cut buffer, the selection.  Treat empty strings
+;;; as if they were unset.
+;;; If this function is called twice and finds the same text,
+;;; it returns nil the second time.  This is so that a single
+;;; selection won't be added to the kill ring over and over.
+(defun my-x-cut-buffer-or-selection-value ()
+  "As `x-cut-buffer-or-selection-value', but priorities cut_buffer. Since VNC uses
+cut_buffer instead of primary selection."
+  (let (text)
+    (when x-select-enable-clipboard
+      (if (null text)
+	  (condition-case c
+	      (setq text (x-get-selection 'CLIPBOARD 'COMPOUND_TEXT))
+	    (error nil)))
+      (if (null text)
+	  (condition-case c
+	      (setq text (x-get-selection 'CLIPBOARD 'STRING))
+	    (error nil)))
+      (if (string= text "") (setq text nil)))
+
+    ;; Moved cut-buffer
+    (or text (setq text (x-get-cut-buffer 0)))
+    (if (string= text "") (setq text nil))
+
+    ;; Don't die if x-get-selection signals an error.
+    (if (null text)
+	(condition-case c
+	    (setq text (x-get-selection 'PRIMARY 'COMPOUND_TEXT))
+	  (error nil)))
+    (if (null text)
+	(condition-case c
+	    (setq text (x-get-selection 'PRIMARY 'STRING))
+	  (error nil)))
+    (if (string= text "") (setq text nil))
+
+;    (or text (setq text (x-get-cut-buffer 0)))
+;    (if (string= text "") (setq text nil))
+
+    (cond
+     ((not text) nil)
+     ((eq text x-last-selected-text) nil)
+     ((string= text x-last-selected-text)
+      ;; Record the newer string, so subsequent calls can use the `eq' test.
+      (setq x-last-selected-text text)
+      nil)
+     (t
+      (setq x-last-selected-text text)))))
+
+(defun my-invoke-fun-with-no-partial-completion (fun)
+  "Help fun to use to temporary disable `partial-completion-mode'"
+  (if (not partial-completion-mode)
+      (call-interactively fun)
+    (partial-completion-mode -1)
+    (condition-case e
+        (call-interactively fun)
+      (quit
+       (partial-completion-mode 1)
+       (signal 'quit nil))
+      (error
+       (partial-completion-mode 1)
+       (error (error-message-string e))))
+    (partial-completion-mode 1)))
+
+(require 'etags)
+(defun my-imenu()
+  "As `imenu', but push mark of entry in tags marker ring"
+  (interactive)
+  (let ((calling-marker (point-marker)))
+    (my-invoke-fun-with-no-partial-completion 'imenu)
+    (if (not (ring-empty-p find-tag-marker-ring))
+        (ring-insert find-tag-marker-ring calling-marker))))
+
+
+(defun my-imenu--completion-buffer (index-alist &optional prompt)
+  "Redefine `imenu--completion-buffer' to make it possible to jump to an index, which is defined in an imenu sub list"
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;; NO CHANGES ;;;;;;;;;;;;;;;;;;;;;;;
+  ;; Create a list for this buffer only when needed.
+  (let ((name (thing-at-point 'symbol))
+	choice
+	(prepared-index-alist
+	 (if (not imenu-space-replacement) index-alist
+	   (mapcar
+	    (lambda (item)
+	      (cons (subst-char-in-string ?\s (aref imenu-space-replacement 0)
+					  (car item))
+		    (cdr item)))
+	    index-alist))))
+    (when (stringp name)
+      (setq name (or (imenu-find-default name prepared-index-alist) name)))
+    (cond (prompt)
+	  ((and name (imenu--in-alist name prepared-index-alist))
+	   (setq prompt (format "Index item (default %s): " name)))
+	  (t (setq prompt "Index item: ")))
+    (let ((minibuffer-setup-hook minibuffer-setup-hook))
+      ;; Display the completion buffer.
+      (if (not imenu-eager-completion-buffer)
+	  (add-hook 'minibuffer-setup-hook 'minibuffer-completion-help))
+      (setq name (completing-read prompt
+				  prepared-index-alist
+				  nil t nil 'imenu--history-list name)))
+
+    (when (stringp name)
+      (setq choice (assoc name prepared-index-alist))
+	   (if (imenu--subalist-p choice)
+               ;;;;;;;;;;;;;;; BEGIN CHANGES ;;;;;;;;;;;;;;;;;;;;;;;
+	       (imenu--completion-buffer (cdr choice) nil)
+             (if (not choice)
+                 ;; Could be found in a sublist
+                 (setq choice (imenu--in-alist name prepared-index-alist)))
+               ;;;;;;;;;;;;;;; END CHANGES ;;;;;;;;;;;;;;;;;;;;;;;;;
+	     choice))))
+
+(defalias 'imenu--completion-buffer 'my-imenu--completion-buffer)
+
+(defvar my-imenu-next-regexp nil
+  "Regexp used to find next alternate imenu entry. This variable is evaluated")
+(make-variable-buffer-local 'my-imenu-next-regexp)
+
+(defvar my-imenu-next-index 0
+  "Sub expression index indicating the next imenu match")
+(make-variable-buffer-local 'my-imenu-next-index)
+
+(defun my-which-function ()
+  "Makes sure function name returned always is a 'car' and not a list. For some
+reason `which-function' always returns a list from Emacs 23.1"
+  (interactive)
+  (let* ((name (which-function)))
+    (if (listp name)
+        (car name)
+      name)))
+
+(defun my-imenu-next ()
+  "Searches for the next hit of current imenu entry"
+  (interactive)
+  (if (not my-imenu-next-regexp)
+      (message "my-imenu-next-regexp not set")
+    (if (not (save-excursion
+               (end-of-line)
+               (which-func-update)
+               (and (which-function)
+                    (re-search-forward (eval my-imenu-next-regexp) nil t))))
+        (message "No more entries")
+      (push-mark)
+      (goto-char (match-beginning my-imenu-next-index))
+      (if (not (ring-empty-p find-tag-marker-ring))
+          (ring-insert find-tag-marker-ring (point-marker))))))
+
+; Emacs-lisp
+(defun my-emacs-lisp-mode-hook ()
+  ; Don't nest Variable and Type imenu entries
+  (setq imenu-generic-expression
+        '(
+          (nil
+           "^\\s-*(def\\(un\\|subst\\|macro\\|advice\\|ine-skeleton\\|alias\\)\\s-+\\([-A-Za-z0-9+*|:/_]+\\)" 2)
+          (nil
+           "^\\s-*(def\\(var\\|const\\|custom\\)\\s-+\\([-A-Za-z0-9+*|:/_]+\\)" 2)
+          (nil
+           "^\\s-*(def\\(group\\|type\\|struct\\|class\\|ine-condition\\)\\s-+\\([-A-Za-z0-9+*|:/_]+\\)"
+           2)))
+  (setq my-imenu-next-regexp
+        '(concat "\\(def\\|const\\|un\\|var\\|alias\\) +\\(" (my-which-function) "\\)\\( \\|$\\)"))
+  (setq my-imenu-next-index 2)
+  (local-set-key "\e." 'my-emacs-lisp-find)
+  (local-set-key "\e." 'my-find-tag)
+  (add-to-list 'which-func-modes 'emacs-lisp-mode-hook)
+  )
+
+(add-hook 'emacs-lisp-mode-hook 'my-emacs-lisp-mode-hook t)
+
+(require 'etags)
+(defun my-emacs-lisp-find()
+  "Find function or marker and push mark of entry in tags marker ring"
+  (interactive)
+  (let ((calling-marker (point-marker)))
+    (if (not (eq (variable-at-point) 0))
+        (my-invoke-fun-with-no-partial-completion 'find-variable)
+      (my-invoke-fun-with-no-partial-completion 'find-function))
+    (if (not (ring-empty-p find-tag-marker-ring))
+        (ring-insert find-tag-marker-ring calling-marker))))
+
+; nXML
+(defun my-nxml-mode-hook ()
+  (modify-syntax-entry ?' "\"")
+  (setq imenu-generic-expression
+        '(
+          (nil
+           "name[ 	]*=[ 	]*[\"']\\([^\"']+\\)" 1)))
+  (setq my-imenu-next-regexp
+        '(concat "name[ 	]*=[ 	]*[\"']\\(" (my-which-function) "\\)"))
+  (setq my-imenu-next-index 1))
+
+(add-hook 'nxml-mode-hook 'my-nxml-mode-hook t)
+
+(defun my-mouse-yank ()
+  "As mouse-yank-at-click, but overwrites region if active."
+  (interactive)
+  (if (and mark-active) (call-interactively 'delete-region))
+  (call-interactively 'mouse-yank-at-click)
+)
+
+(defun my-delete-backward ()
+  "As backward-delete-char-untabify, but also deletes
+region if it is active."
+  (interactive)
+  (if mark-active (call-interactively 'delete-region)
+    (call-interactively 'backward-delete-char-untabify)
+    )
+)
+
+(defun my-delete ()
+  "As delete-char, but also deletes region if it is active."
+  (interactive)
+  (if mark-active (call-interactively 'delete-region)
+    (call-interactively 'delete-char)
+    )
+)
+
+(defun my-yank ()
+  "As yank, but overwrites region if active."
+  (interactive)
+  (if (and mark-active) (call-interactively 'delete-region))
+  (call-interactively 'yank)
+)
+
+(defun match-bracket (arg)
+  "Go to the matching bracket if on bracket, otherwise insert %."
+  (interactive "p")
+  (cond ((looking-at "\\s\(") (forward-list 1) (backward-char 1))
+        ((looking-at "\\s\)") (forward-char 1) (backward-list 1))
+        ((looking-at "\\s\{") (forward-list 1) (backward-char 1))
+        ((looking-at "\\s\}") (forward-char 1) (backward-list 1))
+        ((looking-at "\\s\[") (forward-list 1) (backward-char 1))
+        ((looking-at "\\s\]") (forward-char 1) (backward-list 1))
+        (t (self-insert-command (or arg 1)))
+  )
+)
+
+(defun my-mark-down ()
+  (interactive)
+  (if (not mark-active) (set-mark-command nil))
+  (forward-line 1)
+)
+
+(defun my-mark-up ()
+  (interactive)
+  (if (not mark-active) (set-mark-command nil))
+  (forward-line -1)
+)
+
+(defun my-mark-right ()
+  (interactive)
+  (if (not mark-active) (set-mark-command nil))
+  (forward-char 1)
+)
+
+(defun my-mark-left ()
+  (interactive)
+  (if (not mark-active) (set-mark-command nil))
+  (backward-char 1)
+)
+
+; (setq comp nil)
+; (defun my-completion ()
+;   (interactive)
+;   (if comp (setq comp nil)
+;     (setq comp t)
+;     )
+;   (if comp (comint-dynamic-complete-filename)
+;     (scroll-other-window)
+;     )
+;   (forward-word 1)
+; )
+;   (if
+;       (define-key minibuffer-local-map [tab]  'scroll-other-window)
+;     (define-key minibuffer-local-map [tab]  'my-completion)
+;     )
+; )
+
+;; Host specific section
+;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Modeline
+(setq-default mode-line-format '("-" mode-line-mule-info mode-line-modified mode-line-frame-identification mode-line-buffer-identification " " global-mode-string " %[(" mode-name minor-mode-alist "%n" ")%]--"
+ (which-function-mode
+  ("" which-func-format "--"))
+ (line-number-mode "L%l--")
+ (column-number-mode "C%c--")
+ ("" view-set "-")
+; ("" system-name "--")
+ (-3 . "%p")
+ "-%-")
+)
+
+;; Add path to emacs lisp files (emacs isn't properly installed
+;; on Windows in ESOE).
+;(cond ( (is-windows)
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/calendar")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/emacs-lisp")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/emulation")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/eshell")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/gnus")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/international")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/language")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/mail")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/net")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/obsolete")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/play")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/progmodes")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/term")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/textmodes")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/toolbar")
+;                        )
+;        )
+;        (setq load-path (append load-path
+;                                (list "C:/personal/emacs-21.1.0.0/lisp/")
+;                        )
+;        )
+;      )
+;)
+
+;; My own functions
+;;;;;;;;;;;;;;;;;;;
+
+(defun sgsn-tags ()
+  (interactive)
+  (setq tags-table-list (list "/home/ervjest/Tags/INC"
+                              "/home/ervjest/Tags/MVS"
+                              "/home/ervjest/Tags/MSS"
+                              "/home/ervjest/Tags/SSS"
+                              "/home/ervjest/Tags/XPS"
+                              "/home/ervjest/Tags/MPS"
+                              "/home/ervjest/Tags/MTS"
+                              "/home/ervjest/Tags/UPS"
+                              "/home/ervjest/Tags/EPS"
+                              "/home/ervjest/Tags/EMS"
+                              "/proj/sgsn_rest/work/ervjest/tags/LIS"
+                              "/home/ervjest/Tags/GSS"
+                              "/home/ervjest/Tags/GSS_C"
+                              "/home/ervjest/Tags/COS"
+                              "/home/ervjest/Tags/GCS"
+                              "/home/ervjest/Tags/GTS"
+                              "/home/ervjest/Tags/NCS"
+                              "/home/ervjest/Tags/CTS"
+                              "/home/ervjest/Tags/GEN"
+                              "/home/ervjest/Tags/GTT"
+                              "/home/ervjest/Tags/BT"
+                              "/home/ervjest/Tags/DPE"
+                              "/home/ervjest/Tags/TTX"
+                              "/home/ervjest/Tags/OMS"
+                              "/home/ervjest/Tags/NPS"
+                              )))
+
+;; Xrefactory configuration part ;;
+;; some Xrefactory defaults can be set here
+;(defvar xref-current-project nil) ;; can be also "my_project_name"
+;(defvar xref-key-binding 'global) ;; can be also 'local or 'none
+;(if (string-match "XEmacs" emacs-version)
+;    (setq load-path (append load-path '("/home/ervjest/xref/xemacs")))
+;  (setq load-path (append load-path '("/home/ervjest/xref/emacs")))
+;)
+;(load "xrefactory" 1 1)
+;; end of Xrefactory configuration part ;;
+
+;;; .emacs_emacs ends here

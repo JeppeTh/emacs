@@ -1,0 +1,296 @@
+;; tags specific file for emacs, .emacs_tags
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(require 'etags)
+
+;; Find tag
+(defun my-find-tag ()
+  "As `find-tag' but disables `partial-completion-mode'"
+  (interactive)
+  (my-invoke-fun-with-no-partial-completion 'find-tag))
+
+;; Find next matching tag
+(defun find-next-tag ()
+  (interactive)
+  (find-tag 0 t))
+
+(defun find-next-tag-regexp ()
+  (interactive)
+  (find-tag 0 t t))
+
+(defun my-tag-any-match-p (tag)
+  "Redefine `tag-any-match-p' to make it possible to make partial tag search on
+module:partial_fun_name in erlang.  Returns t if point is in a tag line with a
+tag containing TAG as a substring."
+  (save-excursion
+    (beginning-of-line)
+      (re-search-forward (concat "\177" tag ".*\001")
+                         (save-excursion (end-of-line) (point)) t)))
+(defalias 'tag-any-match-p 'my-tag-any-match-p)
+
+(defun my-tag-re-match-p (re)
+  "Redefine `tag-re-match-p' to make it possible to make regexp tag searches in
+ erlang. Returns t if point is in a tag line with a tag containing TAG as a
+ substring."
+  (save-excursion
+    (beginning-of-line)
+      (re-search-forward (concat "\177" re "\001")
+                         (save-excursion (end-of-line) (point)) t)))
+(defalias 'tag-re-match-p 'my-tag-re-match-p)
+
+(defun my-tag-match-in-curr-file-p (tag)
+  "Searches for tags found in current file before searching in other files."
+  ;; Could use a regexp here - but it was too slow...
+  (let* ((curr-buffer (buffer-name (window-buffer (selected-window))))
+         (point-found nil)
+         (path-search (concat "/" curr-buffer ",")) ; Files with path
+         (nopath-search  (concat "^" curr-buffer ","))) ; Files without path
+    (if (and (or (not first-search)
+                 (search-backward path-search  nil t)
+                 (search-forward path-search  nil t)
+                 (re-search-backward nopath-search  nil t)
+                 (re-search-forward nopath-search  nil t))
+             (search-forward (concat "\177" tag "\001") nil t)
+             (setq point-found (search-backward "\177" nil t))
+             (search-backward "\014" nil t)
+             (or (search-forward path-search  nil t)
+                 (re-search-forward nopath-search nil t)))
+          (goto-char point-found)
+      (goto-char (point-max)) ;; Not found, go to end of buffer
+      nil)))
+
+(defun my-tags-complete-tag (string predicate what)
+  "Redefine `tags-complete-tag' to make it possible to use tag completions on
+  all visited TAG files"
+  (save-excursion
+    ;; If we need to ask for the tag table, allow that.
+    (let ((enable-recursive-minibuffers t))
+      (visit-tags-table-buffer))
+    (let ((table (tags-completion-table)))
+      ;; Consider all possible tag tables in tags-table-list.
+      (while (visit-tags-table-buffer t)
+        (setq table (vconcat table (tags-completion-table))))
+      (if (eq what t)
+          (all-completions string table predicate)
+        (try-completion string table predicate)))))
+(defalias 'tags-complete-tag 'my-tags-complete-tag)
+
+(defun my-tags-hook ()
+  (if (etags-recognize-tags-table)
+      ;; Locate tag in current file first
+      (setq find-tag-tag-order
+            '(my-tag-match-in-curr-file-p tag-exact-match-p tag-any-match-p)
+;            (append '(my-tag-match-in-curr-file-p) find-tag-tag-order)
+            find-tag-regexp-tag-order '(my-tag-re-match-p)
+            default-tags-table-function
+            (function (lambda () (car tags-table-list))))))
+;            default-tags-table-function
+;            (function (lambda () (car (last tags-table-list)))))))
+            ;; To make find-next-tag-regexp work
+;            find-tag-regexp-tag-order
+;            (append '(tag-re-match-p) find-tag-regexp-tag-order))))
+
+(if (>= emacs-major-version 21)
+    (add-hook 'tags-table-format-functions 'my-tags-hook)
+  (add-hook 'tags-table-format-hooks 'my-tags-hook))
+
+;(require 'reposition)
+;(defun my-tag-recenter ()
+;  "Recenter if tag found on line less than 5 lines from end of screen"
+;  (if (> 1 (- (- (window-height) 2) ; Number of screen lines
+;              5
+;              (repos-count-screen-lines (window-start (selected-window)) (point)))) ; current line
+;      (recenter)))
+              
+;(add-hook 'find-tag-hook 'my-tag-recenter)
+
+;; taken from etags.el - but removed save-excursion
+(defun my-find-tag-noselect (tagname &optional next-p regexp-p)
+  "Redefine `find-tag-noselect', removed save-excursion to continue search on
+last hit in TAGS file.
+
+Find tag (in current tags table) whose name contains TAGNAME.
+Returns the buffer containing the tag's definition and moves its point there,
+but does not select the buffer.
+The default for TAGNAME is the expression in the buffer near point.
+
+If second arg NEXT-P is t (interactively, with prefix arg), search for
+another tag that matches the last tagname or regexp used.  When there are
+multiple matches for a tag, more exact matches are found first.  If NEXT-P
+is the atom `-' (interactively, with prefix arg that is a negative number
+or just \\[negative-argument]), pop back to the previous tag gone to.
+
+If third arg REGEXP-P is non-nil, treat TAGNAME as a regexp.
+
+A marker representing the point when this command is onvoked is pushed
+onto a ring and may be popped back to with \\[pop-tag-mark].
+Contrast this with the ring of marks gone to by the command.
+
+See documentation of variable `tags-file-name'."
+  (interactive (find-tag-interactive "Find tag: "))
+
+  (setq find-tag-history (cons tagname find-tag-history))
+  ;; Save the current buffer's value of `find-tag-hook' before selecting the
+  ;; tags table buffer.
+  (let ((local-find-tag-hook find-tag-hook))
+    (if (eq '- next-p)
+	;; Pop back to a previous location.
+	(if (ring-empty-p tags-location-ring)
+	    (error "No previous tag locations")
+	  (let ((marker (ring-remove tags-location-ring 0)))
+	    (prog1
+		;; Move to the saved location.
+		(set-buffer (or (marker-buffer marker)
+                                (error "The marked buffer has been deleted")))
+	      (goto-char (marker-position marker))
+	      ;; Kill that marker so it doesn't slow down editing.
+	      (set-marker marker nil nil)
+	      ;; Run the user's hook.  Do we really want to do this for pop?
+	      (run-hooks 'local-find-tag-hook))))
+      ;; Record whence we came.
+      (ring-insert find-tag-marker-ring (point-marker))
+      (if next-p
+	  ;; Find the same table we last used.
+	  (visit-tags-table-buffer 'same)
+	;; Pick a table to use.
+	(visit-tags-table-buffer)
+	;; Record TAGNAME for a future call with NEXT-P non-nil.
+	(setq last-tag tagname))
+      ;; Record the location so we can pop back to it later.
+      (let ((marker (make-marker)))
+	(set-buffer
+         ;; find-tag-in-order does the real work.
+         (find-tag-in-order
+          (if next-p last-tag tagname)
+          (if regexp-p
+              find-tag-regexp-search-function
+            find-tag-search-function)
+          (if regexp-p
+              find-tag-regexp-tag-order
+            find-tag-tag-order)
+          (if regexp-p
+              find-tag-regexp-next-line-after-failure-p
+            find-tag-next-line-after-failure-p)
+          (if regexp-p "matching" "containing")
+          (not next-p)))
+        (set-marker marker (point))
+        (run-hooks 'local-find-tag-hook)
+        (ring-insert tags-location-ring marker)
+        (current-buffer)))))
+
+(defalias 'find-tag-noselect 'my-find-tag-noselect)
+
+(defvar last-tag-order nil
+  "Variable that contains the tag-order to use in `find-tag-in-order'")
+
+(defun my-find-tag-in-order (pattern
+                             search-forward-func
+                             order
+                             next-line-after-failure-p
+                             matching
+                             first-search)
+  "Redefine `find-tag-in-order'. All TAG files are searched with the specific
+tag-order function before continuing with the next one"
+  (let (file				;name of file containing tag
+	tag-info			;where to find the tag in FILE
+	(first-table t)
+	(tag-order order)
+	(match-marker (make-marker))
+	goto-func
+	)
+    (if first-search
+        ;; This is the start of a search for a fresh tag.
+        ;; Clear the list of tags matched by the previous search.
+        ;; find-tag-noselect has already put us in the first tags table
+        ;; buffer before we got called.
+        (setq tag-lines-already-matched nil)
+      ;; Continuing to search for the tag specified last time.
+      ;; tag-lines-already-matched lists locations matched in previous
+      ;; calls so we don't visit the same tag twice if it matches twice
+      ;; during two passes with different qualification predicates.
+      ;; Switch to the current tags table buffer.
+      (visit-tags-table-buffer 'same)
+      (setq tag-order last-tag-order))
+
+    (setq last-tag-order tag-order)
+
+    ;; Get a qualified match.
+    (catch 'qualified-match-found
+
+      ;; Iterate over the list of ordering predicates.
+      (while tag-order
+        ;; Iterate over the list of tags tables.
+        (while (or first-table
+                   (and (visit-tags-table-buffer t)
+                        (goto-char (point-min))))
+
+          (and first-search first-table
+               ;; Start at beginning of tags file.
+               (goto-char (point-min)))
+
+          (setq first-table nil)
+
+          (while (funcall search-forward-func pattern nil t)
+            ;; Naive match found.  Qualify the match.
+            (and (funcall (car tag-order) pattern)
+                 ;; Make sure it is not a previous qualified match.
+                 (not (member (set-marker match-marker (save-excursion
+                                                         (beginning-of-line)
+                                                         (point)))
+                              tag-lines-already-matched))
+                 (throw 'qualified-match-found nil))
+            (if next-line-after-failure-p
+                (forward-line 1))))
+        ;; Try the next flavor of match.
+        (if (setq tag-order (cdr tag-order))
+            (visit-tags-table-buffer))
+        (setq last-tag-order tag-order)
+        (setq first-table t)
+        (goto-char (point-min)))
+      ;; We throw out on match, so only get here if there were no matches.
+      ;; Clear out the markers we use to avoid duplicate matches so they
+      ;; don't slow down editting and are immediately available for GC.
+      (while tag-lines-already-matched
+        (set-marker (car tag-lines-already-matched) nil nil)
+        (setq tag-lines-already-matched (cdr tag-lines-already-matched)))
+      (set-marker match-marker nil nil)
+      (error "No %stags %s %s" (if first-search "" "more ")
+             matching pattern))
+
+    ;; Found a tag; extract location info.
+    (beginning-of-line)
+    (setq tag-lines-already-matched (cons match-marker
+                                          tag-lines-already-matched))
+    ;; Expand the filename, using the tags table buffer's default-directory.
+    (setq file (expand-file-name (file-of-tag))
+          tag-info (funcall snarf-tag-function))
+
+    ;; Get the local value in the tags table buffer before switching buffers.
+    (setq goto-func goto-tag-location-function)
+
+    ;; Find the right line in the specified file.
+    (set-buffer (find-file-noselect file))
+    (widen)
+    (push-mark)
+    (funcall goto-func tag-info)
+
+    ;; Return the buffer where the tag was found.
+    (current-buffer)))
+
+(defalias 'find-tag-in-order 'my-find-tag-in-order)
+
+(defun my-etags-file-of-tag (str)
+  "Advice function for `etags-file-of-tag' to manage environment variables in file path."
+  (if (and (not (eq (string-match "^.*\\($.+\\)" str) nil)))
+      (substitute-in-file-name (match-string 1 str))
+    str))
+
+;;(advice-add 'etags-file-of-tag  :filter-return #'my-etags-file-of-tag)
+(defadvice etags-file-of-tag
+  (after etags-file-of-tag-support-env (n))
+  "Manage environment variables in file paths - see `my-etags-file-of-tag'."
+  (if (stringp ad-return-value)
+      (setq ad-return-value (my-etags-file-of-tag ad-return-value))))
+(ad-activate 'etags-file-of-tag)
+
+
