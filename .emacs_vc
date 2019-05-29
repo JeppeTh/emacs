@@ -26,10 +26,10 @@
   (interactive)
   (if (and (not (featurep 'mygit)) vc-mode)
       (progn
-        (condition-case err
-            (load-my-git)
-          (error
-           (message "Failed to load git:%s" err)))
+        ;;(condition-case err
+        ;;    (load-my-git)
+        ;;  (error
+        ;;   (message "Failed to load git:%s" err)))
         (load ".emacs_git")
         (revert-buffer nil t)
         )
@@ -183,3 +183,63 @@
     (if (and (featurep 'mygit) (not (is-clearcase)))
         (my-git-expand-file-name-with-version name)
       name)))
+
+;; Windows Stuff
+;;(require 'egg)
+(require 'comint)
+;;(setq-default egg-git-command "C:/Documents and Settings/Owner/Local Settings/Application Data/GitHub/PortableGit_054f2e797ebafd44a30203088cd3d58663c627ef/bin/git.exe")
+;;(load "egg-grep")
+(when (require 'powershell nil t)
+  (setq powershell-prompt-regex "[^>]+> ")
+  (setq shell-dumb-shell-regexp "\\(cmd\\(proxy\\)?\\|powershell\\)\\.exe"))
+
+(defun git-shell ()
+  (interactive)
+  (setq explicit-bash-args '("--login" "-i"))
+  (if (get-buffer "*GitShell*")
+      (switch-to-buffer "*GitShell*")
+    (let* ((curdir (string-match "DIRECTORY \\(.+\\)" (pwd)))
+           (curdir (match-string 1 (pwd)))
+           (curbuf (buffer-name))
+           (changedir (if (string-match "Owner/My Documents/GitHub" curdir)
+                          nil
+                        (cd "c:/Documents and Settings/Owner/My Documents/GitHub")))
+           (explicit-shell-file-name "C:/Program Files/git/bin/sh.exe")
+           (newbuf (shell "*GitShell*"))
+           )
+      (if changedir
+          (progn
+            (set-buffer curbuf)
+            (cd curdir)
+            (set-buffer newbuf)
+            )
+        )
+      (setq comint-input-ring-file-name "~/.git_history")
+      (comint-read-input-ring)
+      ))
+  )
+
+(defun git-powershell ()
+  (interactive)
+  (if (get-buffer "*PowerShell*")
+      (switch-to-buffer "*PowerShell*")
+    (let* ((curdir (string-match "DIRECTORY \\(.+\\)" (pwd)))
+           (curdir (match-string 1 (pwd)))
+           (curbuf (buffer-name))
+           (changedir (if (string-match "My Documents/GitHub" curdir)
+                          nil
+                        (cd "D:/My Documents/GitHub")))
+           (newbuf (powershell))
+           )
+      (if changedir
+          (progn
+            (set-buffer curbuf)
+            (cd curdir)
+            (set-buffer newbuf)
+            )
+        )
+      (set-process-query-on-exit-flag (get-buffer-process (buffer-name)) t)
+      (setq comint-input-ring-file-name "~/.git_history")
+      (comint-read-input-ring)
+      ))
+  )

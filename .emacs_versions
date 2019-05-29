@@ -87,7 +87,11 @@
                       js2-mode
                       org
                       helm
-                      go-mode))
+                      go-mode
+                      powershell
+                      web-beautify
+                      ))
+  ;;(bash-completion js-auto-beautify js-format)
   ;;(add-to-list 'package-archives
   ;;             '("marmalade" . "https://marmalade-repo.org/packages/"))
   ;;(add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/"))

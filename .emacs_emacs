@@ -194,12 +194,13 @@ determine the target buffer."
 (defun my-ediff-startup-hook ()
   (if (< emacs-major-version 21)
       (run-hooks 'ediff-before-setup-hook))
-
-  (if (fboundp 'set-frame-parameter)
-      (set-frame-parameter nil 'fullscreen 'maximized)
-      ;;(set-frame-parameter nil 'fullscreen 'fullheight)
-    (set-frame-height (selected-frame) 70))
+  ;;(if (fboundp 'set-frame-parameter)
+  ;;    (set-frame-parameter nil 'fullscreen 'maximized)
+  ;;  (set-frame-height (selected-frame) 60))
   (ediff-toggle-wide-display)
+  (set-frame-position (selected-frame) 0 0)
+  (set-frame-height (selected-frame) 60)
+
   (if (eq ediff-split-window-function 'split-window-vertically)
       (ediff-toggle-split))
   (define-key ediff-mode-map "i"  nil)
