@@ -1,0 +1,228 @@
+;;(shell-command-to-string (concat "sh -c '. /proj/tecsas-scratch/var/tbox/sessions/" user-login-name "_0.lock; echo ${TBOX_HOST}-tb${TBOX_INSTANCE}'"))
+(defvar tbox-session "0")
+(defvar tbox-host nil)
+(defun init-tbox-paramaters ()
+  (interactive)
+  (let* ((session-data (shell-command-to-string "echo -n `grep -l -e \"$GSN_WS_NAME\"$ /proj/tecsas-scratch/var/tbox/sessions/\"$USER\"_*.lock`|xargs cat $1")))
+    (setq tbox-session (my-string-match "TBOX_SESSION=\\([0-9]+\\)" session-data 1))
+    ;;(setenv "tbox-session" tbox-session)
+    (setq tbox-host (concat (my-string-match "TBOX_HOST=\\(.+\\)$" session-data 1)
+                            "-tb"
+                            (my-string-match "TBOX_INSTANCE=\\([0-9]+\\)" session-data 1)))))
+(init-tbox-paramaters)
+(if (null explicit-shell-file-name)
+    (setq-default explicit-shell-file-name shell-file-name))
+(require 'tramp)
+(add-to-list 'tramp-methods
+             `(,"tbox"
+               (tramp-login-program      ,"/proj/sgsn-tools/tbox/bin/tbox")
+               (tramp-login-args         (,nil ("--connect") ("--session=%h") ("%h")))
+               (tramp-remote-shell       "/bin/sh")
+               (tramp-remote-shell-args  ("-i" "-c"))))
+
+(add-to-list 'tramp-methods
+             `(,"tbox-pod"
+               (tramp-login-program      ,"/proj/sgsn-tools/tbox/bin/tbox")
+               (tramp-login-args
+                (,
+                 nil
+                 ("--connect")
+                 ("--session=%h")
+                 ("%h")
+                 ("-cmd" "\"kubectl exec -it %u sh\"")
+                 ))
+               (tramp-remote-shell       "/bin/sh")
+               (tramp-remote-shell-args  ("-i" "-c"))))
+
+(defconst tbox-pod-completion-function-alist
+  '((tbox-pod-completions "")))
+
+(defun tbox-pod-completions (ignore)
+  (cl-loop for name in (get-tbox-pods)
+           collect (list ""  (concat name "@" tbox-session))))
+
+(tramp-set-completion-function "tbox-pod" tbox-pod-completion-function-alist)
+
+(defun make-tbox-cmd-list (cmd &optional startfile)
+  (list "/proj/sgsn-tools/tbox/bin/tbox" startfile "-connect" "-nox11" "-session" tbox-session "-q" "-cmd" cmd))
+
+(defun make-tbox-cmd (cmd &optional startfile)
+  (mapconcat 'identity (make-tbox-cmd-list cmd startfile) " "))
+
+(defun tbox-cmd-to-string (cmd)
+  (shell-command-to-string (make-tbox-cmd (concat "'" cmd "'"))))
+
+(defun get-tbox-screens ()
+  (let ((screen-output (tbox-cmd-to-string "/local/tecsas/3pp/bin/screen -list"))
+        (start 0)
+        (screens (list)))
+    (while (string-match "-tb[0-9]+_\\([^ 	]+\\)" screen-output start)
+      (setq screens (append (list (match-string 1 screen-output)) screens))
+      (setq start (match-end 1)))
+    screens))
+
+(defvar screen--history-list nil
+  "History list for 'attach-tbox-screen'.")
+(defun attach-tbox-screen ()
+  (interactive)
+  (let* ((screens (get-tbox-screens))
+         (screen (completing-read "Screen: " (append (list "all") screens)  nil nil nil 'screen--history-list "all")))
+    (if (equal screen "all")
+        (dolist (screen screens) (tbox-screen screen))
+      (tbox-screen screen))))
+
+(defvar tbox-pods nil)
+(defun get-tbox-pods ()
+  (if tbox-pods
+      tbox-pods
+    (let ((cmd-output (tbox-cmd-to-string "kubectl get pods -o name"))
+          (start 0)
+          (pods (list)))
+      (while (string-match "^pod/\\(.+\\)$" cmd-output start)
+      (setq pods (append (list (match-string 1 cmd-output)) pods))
+      (setq start (match-end 1)))
+      (setq tbox-pods pods))))
+
+(defun get-ncb-pod ()
+  (car (cl-member "controller" (get-tbox-pods) :test #'string-match)))
+
+(defvar tbox-pods--history-list nil
+  "History list for 'connect-tbox-pod'.")
+(defun connect-tbox-pod ()
+  (interactive)
+  (let* ((pods (get-tbox-pods))
+         (pod (completing-read "Pod: " (append (list "all") pods)  nil nil nil 'tbox-pods--history-list "all")))
+    (if (equal pod "all")
+        (dolist (pod pods) (tbox-pod pod))
+      (tbox-pod pod))))
+
+(defun tbox-pod (pod)
+  (find-file (concat "/tbox-pod:" pod "@" tbox-session ":/")))
+
+
+(defvar ncb-ip "172.16.4.146")
+(defun tbox-fix-ncb ()
+  "Determines IP of active NCB"
+  (interactive)
+  (let* ((ip1 "172.16.4.146")
+         (ip2 "172.16.4.242")
+         (cmd (concat "ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ip1 " gsh get_active_ncb"))
+         (gsh_output (tbox-cmd-to-string cmd)))
+    (if (or (string-match "EquipmentId:" gsh_output) (string-match "CLI is currently not available" gsh_output))
+        (setq ncb-ip ip1)
+      (setq ncb-ip ip2))))
+
+(defun tbox-make-comint (is-ncb name program &optional startfile)
+  (let* ((program (if (equal "screen" program)
+                      "/local/tecsas/3pp/bin/screen -d -r -S eselnlx1465-tb42_GTT -e^ad"
+                    program))
+         (cmd (if is-ncb
+                  (make-ncb-command program)
+                (concat "\"" program  "\""))))
+    (apply 'make-comint (append (list name) (make-tbox-cmd-list cmd startfile)))))
+
+(defun make-ncb-command (program) 
+  (if (not tbox-pods)
+      (progn
+        (tbox-fix-ncb)
+        (concat "\"ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ncb-ip " " program "\""))
+    (if (equal program "erl")
+        (setq program "/tmp/DPE_SC/LoadUnits/ttx/int/bin/to_erl"))
+    (concat "\"kubectl exec -it " (get-ncb-pod) " " program "\"")))
+
+(defun tbox-make-term (is-ncb name program &optional startfile &rest switches)
+
+  (let* ((cmd (if is-ncb
+                  (concat "\"ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ncb-ip " " program)
+                (concat "\" " program)))
+         (cmd (if (not switches) 
+                  cmd
+                (dolist (switch switches cmd) (setq cmd (concat cmd  " " switch)))))
+         (cmd (concat cmd "\"")))
+    (apply 'make-term (append (list name) (make-tbox-cmd-list cmd startfile)))))
+
+;;/local/tecsas/3pp/bin/screen -list  
+(defun tbox-screen(host_suffix &optional inputname historyfile is-ncb)
+  (interactive "sScreen host suffix: ")
+  (let* ((name (if inputname inputname host_suffix))
+         (screen_name (concat "*" name "*"))
+         (historyfile (if historyfile historyfile "~/.screen_history"))
+         )
+    (if (get-buffer-process (get-buffer screen_name))
+        (switch-to-buffer screen_name)
+      (fix-tecsas-env)
+      (let* (
+             ;;(tbox_host (shell-command-to-string (concat "cat " (getenv "tecsas") "/TECSAS_HOST_ADDRESS | sed 's/^[0-9.]* //g'")))
+             (host (concat tbox-host "_" host_suffix))
+             (screen_cmd  (concat "/local/tecsas/3pp/bin/screen -d -r -S " host " -e^ad")))
+        (tbox-make-term is-ncb name screen_cmd nil inputname)
+        (switch-to-buffer screen_name)
+        (compilation-shell-minor-mode 1)
+        (setq compilation-scroll-output nil)
+        (my-term-shell-mode-hook)
+        (local-set-key [(control backspace)] 'my-send-backspace)
+        (local-set-key [(control tab)] 'dabbrev-expand)
+        (local-set-key [return]        'my-compile-goto-error)
+        ;;(add-function :before (process-filter (get-buffer-process (get-buffer screen_name))) #'(lambda (proc str) (my-tbox-strip-cshrc-echos str)))
+      ;;  (add-function :filter-return (local 'eshell-post-rewrite-command-function)
+      ;;                #'eshell--apply-redirections))
+      ;;(add-function :override (process-filter process)
+      ;;              #'gud-tooltip-process-output)
+        ;;(comint-mode)
+        ;;(add-hook 'term-preoutput-filter-functions 'my-tbox-strip-cshrc-echos nil t))))
+        (if (and historyfile (file-readable-p historyfile))
+            (progn
+              (make-local-variable 'term-input-ring-file-name)
+              (setq term-input-ring-file-name historyfile)
+              (term-read-input-ring)
+              ))
+        ;;(setq term-prompt-regexp "^[^<>=,]*> ?")
+        (setq term-prompt-regexp "^\\([^<>=,]*> ?\\|==.+ # \\)")
+        ;;;;Don't use compilation
+        ;;(make-local-variable 'inferior-erlang-use-cmm)
+        ;;(setq inferior-erlang-use-cmm nil)
+        ;;(erlang-shell-mode)
+        ;;(if (and historyfile (file-readable-p historyfile))
+        ;;    (progn
+        ;;      (setq-local comint-input-ring-file-name historyfile)
+        ;;      (comint-read-input-ring t)))
+        ;; Don't complete filename
+        (setq-local term-dynamic-complete-functions
+              (append (list 'term-replace-by-expanded-history 'my-send-tab)))
+        (setq-local term-scroll-with-delete nil)
+        (make-local-variable     'find-tag-default-function)
+        (setq-local find-tag-default-function 'my-erlang-find-tag-default))
+      ;; Return new if new tbox has been started
+      (run-at-time 2 nil 'my-term-highlight-all-prompts)
+      )))
+      ;;(setq comint-process-echoes t))))
+
+
+;; Copied from `inferior-erlang-strip-ctrl-m'.
+(defun my-tbox-strip-cshrc-echos (&optional string)
+  "Strip trailing \"echoes\" from .cshrc"
+  (interactive)
+  (if (string-match "^\\(]2;\\|Welcome hårdrockarn\\).+$" string)
+      ""
+    string))
+
+
+  ;;(if (and (boundp 'comint-last-input-end)
+  ;;         (boundp 'comint-last-output-start))
+  ;;    (let ((pmark (process-mark (get-buffer-process (current-buffer)))))
+  ;;      (save-excursion
+  ;;        (goto-char
+  ;;         (if (interactive-p)
+  ;;             (symbol-value 'comint-last-input-end)
+  ;;           (symbol-value 'comint-last-output-start)))
+  ;;        (while (re-search-forward "^]2;.+$" pmark t)
+  ;;          (replace-match "" t t))))))
+
+(defun is-tbox-session-correct ()
+  (not (eq (string-match (getenv "GSN_WS_NAME") (get-tbox-installation)) nil)))
+
+(defun get-tbox-installation() 
+  (let ((tbox-result (tbox-cmd-to-string "echo $TECSAS_INSTALLATION_ROOT/$GSN_WS_NAME")))
+    (if (string-match ".*\\(^/\\(proj\\|local\\).*\\)$" tbox-result)
+        (match-string 0 tbox-result)
+      nil)))

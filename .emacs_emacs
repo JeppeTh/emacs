@@ -123,6 +123,26 @@ determine the target buffer."
     (local-set-key "\C-g" org-quit-cmd)
     (pop-to-buffer org-buffer)))
 
+(defun my-ediff-ipa-previous  (arg &optional key)
+  "`ipa-previous' during Ediff.
+If the second optional argument, a character, is given, use it to
+determine the target buffer."
+  (interactive "P")
+  (let* ((org-buffer (buffer-name)))
+    (pop-to-buffer (ediff-get-buffer (ediff-char-to-buftype (or key (ediff-last-command-char)))))
+    (ipa-previous)
+    (pop-to-buffer org-buffer)))
+
+(defun my-ediff-ipa-next  (arg &optional key)
+  "`ipa-previous' during Ediff.
+If the second optional argument, a character, is given, use it to
+determine the target buffer."
+  (interactive "P")
+  (let* ((org-buffer (buffer-name)))
+    (pop-to-buffer (ediff-get-buffer (ediff-char-to-buftype (or key (ediff-last-command-char)))))
+    (ipa-next)
+    (pop-to-buffer org-buffer)))
+
 
 (defun my-ediff-startup-hook ()
   (if (< emacs-major-version 21)
@@ -139,6 +159,12 @@ determine the target buffer."
   (define-key ediff-mode-map "ia" 'my-ediff-ipa-insert)
   (define-key ediff-mode-map "ib" 'my-ediff-ipa-insert)
   (define-key ediff-mode-map "ic" 'my-ediff-ipa-insert)
+  (define-key ediff-mode-map "ipa" 'my-ediff-ipa-previous)
+  (define-key ediff-mode-map "ipb" 'my-ediff-ipa-previous)
+  (define-key ediff-mode-map "ipc" 'my-ediff-ipa-previous)
+  (define-key ediff-mode-map "ina" 'my-ediff-ipa-next)
+  (define-key ediff-mode-map "inb" 'my-ediff-ipa-next)
+  (define-key ediff-mode-map "inc" 'my-ediff-ipa-next)
   (local-set-key "\C-r" 'ediff-revert-buffers-then-recompute-diffs)
   ;;(let ((top-pos  (- (frame-parameter nil `top) 22)))
   ;;  (ediff-toggle-wide-display)
@@ -229,9 +255,9 @@ determine the target buffer."
 (cond ( (>= emacs-major-version 21)
         (set-face-background 'isearch'  "dim gray")
         (set-face-foreground 'isearch'  "white")
-;        (set-face-background 'isearch-lazy-highlight-face' "black")
-        (set-face-background 'isearch-lazy-highlight-face' nil)
-        (set-face-foreground 'isearch-lazy-highlight-face' "dim gray")
+;        (set-face-background 'lazy-highlight' "black")
+        (set-face-background 'lazy-highlight' nil)
+        (set-face-foreground 'lazy-highlight' "dim gray")
       )
 
       ( (< emacs-major-version 21)
@@ -436,7 +462,7 @@ reason `which-function' always returns a list from Emacs 23.1"
   (setq my-imenu-next-index 2)
   (local-set-key "\e." 'my-emacs-lisp-find)
   (local-set-key "\e." 'my-find-tag)
-  (add-to-list 'which-func-modes 'emacs-lisp-mode-hook)
+  ;;(add-to-list 'which-func-modes 'emacs-lisp-mode-hook)
   )
 
 (add-hook 'emacs-lisp-mode-hook 'my-emacs-lisp-mode-hook t)
@@ -461,7 +487,9 @@ reason `which-function' always returns a list from Emacs 23.1"
            "name[ 	]*=[ 	]*[\"']\\([^\"']+\\)" 1)))
   (setq my-imenu-next-regexp
         '(concat "name[ 	]*=[ 	]*[\"']\\(" (my-which-function) "\\)"))
-  (setq my-imenu-next-index 1))
+  (setq my-imenu-next-index 1)
+  (local-set-key "\e\C-d"   'my-vc-ediff-other-current-buffer)
+)
 
 (add-hook 'nxml-mode-hook 'my-nxml-mode-hook t)
 

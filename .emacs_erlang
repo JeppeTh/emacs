@@ -1,6 +1,8 @@
 ;; Erlang style definition file, .emacs_erlang
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(load ".emacs_tbox")
+
 (require 'compile)
 (if (< emacs-major-version 22)
     (add-to-list 'compilation-error-regexp-alist
@@ -74,45 +76,77 @@ containing a tab or beginning with a '('."
 (defun my-erlang-send-tab ()
   "Sends a tab to the erlang-shell to get completions on input"
   (interactive)
-  (if (string-match "(" (comint-get-old-input-default))
-      nil
-    (let ((org-fun comint-input-sender))
-      (setq comint-input-sender (function my-comint-simple-send))
-      (insert "	")
-      (comint-send-input)
-      (setq comint-input-sender org-fun))))
+  (let
+      ((current-input (if my-term-shell-mode
+                          (term-get-old-input-default)
+                        (comint-get-old-input-default))))
+    (if (string-match "(" current-input)
+        nil
+      (my-send-tab))))
 
+(defun my-send-tab ()
+  "Sends a tab to the shell to get completions on input"
+  (interactive)
+  (let* ((org-term-fun term-input-sender)
+         (org-comint-fun comint-input-sender)
+         (used-ring (if my-term-shell-mode term-input-ring comint-input-ring))
+         (last-history (ring-ref used-ring 0)))
+    (condition-case nil
+        (progn
+          (setq-local term-input-sender (function my-simple-send))
+          (setq-local comint-input-sender (function my-simple-send))
+          (insert "	")
+          (if my-term-shell-mode
+              (term-send-input)
+            (comint-send-input))
+          (if (not (eq last-history (ring-ref used-ring 0)))
+              (ring-remove used-ring 0))
+          )
+      (quit
+       nil)
+      (error
+       nil))
+    (setq-local term-input-sender org-term-fun)
+    (setq-local comint-input-sender org-comint-fun)
+    ))
 
-(defun my-comint-simple-send (proc string)
-  "As `comint-simple-send' but skips the newline."
-  (comint-send-string proc string))
+(defun my-simple-send (proc string)
+  "As `term-simple-send'/`comint-simple-send' but skips the newline."
+  (if my-term-shell-mode
+      (term-send-string proc string)
+    (comint-send-string proc string)))
 
-(defun my-erlang-send-backspace ()
-  "Sends a backspace to the erlang-shell. Useful when using `my-erlang-send-tab' 
+(defun my-send-backspace ()
+  "Sends a backspace to the shell. Useful when using `my-send-tab' 
 for completion since a backspace then must also be sent to the shell."
   (interactive)
-  (let ((home-pos (save-excursion (comint-bol nil))))
+  (let ((home-pos (save-excursion (if my-term-shell-mode (term-bol nil) (comint-bol nil)))))
     (if (eq home-pos (point))
         (error "At prompt")
       (let ((proc (get-buffer-process (current-buffer))))
         (process-send-string proc (char-to-string 127))))))
 
-(defun my-erlang-send-return ()
+(defun my-send-return ()
   (interactive)
-  (let ((cmd (comint-get-old-input-default)))
-    (comint-send-input)
+  (let* ((cmd (if my-term-shell-mode 
+                  (term-get-old-input-default) 
+                (comint-get-old-input-default)))
+         (used-ring (if my-term-shell-mode term-input-ring comint-input-ring))
+         (last-history (ring-ref used-ring 0))
+         )
+    (if my-term-shell-mode
+        (term-send-input)
+      (comint-send-input))
     ;; If beginning of cmd is completed by shell, only the typed arguments
     ;; will be stored in the history. Replace this entry with the complete
     ;; command in that case.
-    (let ((last-history (ring-ref comint-input-ring 0)))
-      (if (and (not (string-match "(" last-history))
-               (string-match ")" last-history)
-               (string-match last-history cmd))
-          (ring-remove comint-input-ring 0)))
+    (if (and (not (string-equal (ring-ref used-ring 0) cmd))
+             (not (string-equal (ring-ref used-ring 0) last-history)))
+        (ring-remove used-ring 0))
     ;; Insert cmd as last entry in history in case it been filtered out or
     ;; removed
-    (if (not (string-equal (ring-ref comint-input-ring 0) cmd))
-        (ring-insert comint-input-ring cmd))))
+      (if (not (string-equal (ring-ref used-ring 0) cmd))
+          (ring-insert used-ring cmd))))
 
 (defun my-erlang-quit ()
   (interactive)
@@ -184,10 +218,19 @@ permanently the indentation in Erlang mode would be incorrect."
 
 (add-hook 'Man-mode-hook 
           (lambda () 
+            ;;(if saved-erlang-man-function-name
+            ;;    (Man-notify-when-ready (current-buffer)))
             (setq imenu-generic-expression my-erlang-man-imenu-generic-expression)
             (setq my-imenu-next-regexp '(concat (my-which-function) "[ 	]*("))
             )
           )
+
+;;(add-hook 'Man-cooked-hook 
+;;          (lambda () 
+;;            (if saved-erlang-man-function-name
+;;                (Man-notify-when-ready (current-buffer)))
+;;            )
+;;          )
 (defun my-erlang-man-follow ()
   (interactive)
   (if (erlang-get-function-under-point)
@@ -195,15 +238,38 @@ permanently the indentation in Erlang mode would be incorrect."
       (erlang-man-function (nth 1 (erlang-get-function-under-point)))
     (erlang-man-module (thing-at-point 'symbol))))
 
+(defvar saved-erlang-man-function-name nil)
+
 (defadvice Man-notify-when-ready
-  (before erlang-man-mode-hook (&optional NAME))
+  (before erlang-man-mode-hook (MAN-BUFFER))
   "Fix so man-mode is using `erlang-man-function'"
+  (with-current-buffer MAN-BUFFER
+    (if (and (eq (buffer-size) 0) erlang-man-function-name)
+        (progn
+          (setq saved-erlang-man-function-name erlang-man-function-name)
+          (setq erlang-man-function-name nil)
+          )
+      (if (and (> (buffer-size) 0) saved-erlang-man-function-name)
+          (progn
+            (Man-mode)
+            (setq erlang-man-function-name saved-erlang-man-function-name)
+            (setq saved-erlang-man-function-name nil)))))
   (if (and (equal mode-name "Man") erlang-man-function-name)
       (progn
         (local-set-key "m"      'erlang-man-function)
         (local-set-key [return] 'my-erlang-man-follow)
         )))
 (ad-activate 'Man-notify-when-ready)
+
+
+(defadvice Man-bgproc-sentinel
+  (after my-notify-man-ready (PROCESS MSG))
+  "Fix so man-mode for erlang from emacs 25"
+  (if saved-erlang-man-function-name
+      (Man-notify-when-ready (process-buffer PROCESS))))
+
+(if (> emacs-major-version 24)
+    (ad-activate 'Man-bgproc-sentinel))
 
 (defadvice erlang-man-find-function
   (after my-erlang-find-function (BUF FUNC))
@@ -241,7 +307,7 @@ permanently the indentation in Erlang mode would be incorrect."
 
 (defun my-erlang-shell-mode-hook ()
   ; Key Bindings
-  (local-set-key [(control backspace)] 'my-erlang-send-backspace)
+  (local-set-key [(control backspace)] 'my-send-backspace)
   (local-set-key [(control tab)]       'dabbrev-expand)
   (local-set-key [return]              'my-compile-goto-error)
 
@@ -363,6 +429,7 @@ permanently the indentation in Erlang mode would be incorrect."
   (local-set-key [return]         'newline-and-indent)
   (local-set-key "\ee"            'erlang-end-of-clause)
   (local-set-key "\ea"            'erlang-beginning-of-clause)
+  (local-set-key "\C-c\C-k"       'my-compile-test-module)
   (local-set-key "\C-t"           'my-run-test-case)
   (local-set-key "\C-xt"          'my-run-suite)
   (local-set-key "\C-xa"          'my-run-all)
@@ -386,9 +453,9 @@ permanently the indentation in Erlang mode would be incorrect."
   (setq imenu-extract-index-name-function nil)
   (setq imenu-generic-expression my-erlang-imenu-generic-expression)
   (setq imenu-create-index-function 'my-imenu-create-index)
-  (setq my-imenu-next-regexp '(concat "^\??" (my-which-function) "[ 	]*("))
+  (setq my-imenu-next-regexp '(concat "^\\(-type[	 ]*\\|define[ 	]*(\\)?\\??" (my-which-function) "[ 	]*[(,]"))
 
-  (add-to-list 'which-func-modes       'erlang-mode)
+  ;;(add-to-list 'which-func-modes       'erlang-mode)
   (add-to-list 'erlang-electric-comma-criteria
                'erlang-electric-check-buffer-size)
   (make-local-variable 'font-lock-extend-region-functions)
@@ -427,9 +494,7 @@ case buffer is too big"
         (save-excursion
           (compile-goto-error))
       (error
-       (if my-term-shell-mode
-           (call-interactively 'term-send-input)
-         (call-interactively 'my-erlang-send-return)))))
+       (my-send-return))))
 
 (defun get-ct-name ()
   "Returns the component name"
@@ -548,6 +613,14 @@ editing control characters:
     )
   )
 
+
+(defun my-compile-test-module ()
+  "Compile GTT module in case of GTT module. Otherwise runs `erlang-compile'."
+  (interactive)
+  (if (string-match "/test/gtt/" default-directory)
+      (my-gtt-run (erlang-get-module) "{void,void}.")
+    (erlang-compile)))
+
 (defun my-run-test-case ()
   "Run GTT or CT test case."
   (interactive)
@@ -658,7 +731,7 @@ editing control characters:
   (if (re-search-forward "{ *\\(.*\\), *\\(.*\\), *\\[\\(.*\\)\\]}.*" nil t)
     (replace-match "\\1:\\2(\\3)," nil nil)))
 
-(defun to_erl (pipe &optional inputname historyfile tbox ncb)
+(defun to_erl (pipe &optional inputname historyfile is-tbox is-ncb)
   (interactive "spipe: ")
   (let* ((name (if inputname
                    inputname
@@ -666,11 +739,11 @@ editing control characters:
          (to_erl_name (concat "*" name "*")))
     (if (get-buffer-process (get-buffer to_erl_name))
         (switch-to-buffer to_erl_name)
-      (if tbox
-          (tbox-make-comint ncb name "erl" nil nil)
+      (if is-tbox
+          (tbox-make-comint is-ncb name "erl")
         (make-comint name "to_erl" nil pipe))
       (switch-to-buffer to_erl_name)
-      (if tbox
+      (if is-tbox
           (add-hook 'comint-preoutput-filter-functions 'my-tbox-strip-cshrc-echos nil t))
       ;; Don't use compilation
       ;; Why not - what did I mean with this?
@@ -687,77 +760,10 @@ editing control characters:
       (make-local-variable     'find-tag-default-function)
       (setq-local find-tag-default-function 'my-erlang-find-tag-default)
       (setq-local comint-process-echoes t))))
-(defun tbox_to_erl (pipe &optional inputname historyfile ncb)
-  (to_erl pipe inputname historyfile "tbox" ncb))
 
-;;(shell-command-to-string (concat "sh -c '. /proj/tecsas-scratch/var/tbox/sessions/" user-login-name "_0.lock; echo ${TBOX_HOST}-tb${TBOX_INSTANCE}'"))
+(defun tbox_to_erl (pipe &optional inputname historyfile is-ncb)
+  (to_erl pipe inputname historyfile "tbox" is-ncb))
 
-(defvar tbox-session "0")
-(defun make-tbox-cmd-list (cmd &optional startfile)
-  (list "/proj/sgsn-tools/tbox/bin/tbox" startfile "-connect" "-nox11" "-session" tbox-session "-q" "-cmd" cmd))
-
-(defun make-tbox-cmd (cmd &optional startfile)
-  (mapconcat 'identity (make-tbox-cmd-list cmd startfile) " "))
-
-(defun tbox-cmd-to-string (cmd)
-  (shell-command-to-string (make-tbox-cmd (concat "'" cmd "'"))))
-
-(defun get-tbox-screens ()
-  (let ((screen-output (tbox-cmd-to-string "/local/tecsas/3pp/bin/screen -list"))
-        (start 0)
-        (screens (list)))
-    (while (string-match "-tb[0-9]+_\\([^ 	]+\\)" screen-output start)
-      (setq screens (append (list (substring screen-output (match-beginning 1) (match-end 1))) screens))
-      (setq start (match-end 1)))
-    screens))
-
-(defvar screen--history-list nil
-  "History list for 'attach-tbox-screen'.")
-(defun attach-tbox-screen ()
-  (interactive)
-  (let* ((screens (get-tbox-screens))
-         (screen (completing-read "Screen: " (append (list "all") screens)  nil nil nil 'screen--history-list "all")))
-    (if (equal screen "all")
-        (dolist (screen screens) (tbox-screen screen))
-      (tbox-screen screen))))
-
-(defvar ncb-ip "172.16.4.146")
-(defun tbox-make-comint (ncb name program &optional startfile &rest switches)
-  (if ncb
-      (tbox-fix-ncb))
-  (let* ((program (if (equal "screen" program)
-                      "/local/tecsas/3pp/bin/screen -d -r -S eselnlx1465-tb42_GTT -e^ad"
-                    program))
-         (cmd (if ncb
-                  (concat "\"ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ncb-ip " " program)
-                (concat "\" " program)))
-         (cmd (if (not switches) 
-                  cmd
-                (dolist (switch switches cmd) (setq cmd (concat cmd  " " switch)))))
-         (cmd (concat cmd "\"")))
-    (apply 'make-comint (append (list name) (make-tbox-cmd-list cmd startfile)))))
-
-(defun tbox-make-term (ncb name program &optional startfile &rest switches)
-
-  (let* ((cmd (if ncb
-                  (concat "\"ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ncb-ip " " program)
-                (concat "\" " program)))
-         (cmd (if (not switches) 
-                  cmd
-                (dolist (switch switches cmd) (setq cmd (concat cmd  " " switch)))))
-         (cmd (concat cmd "\"")))
-    (apply 'make-term (append (list name) (make-tbox-cmd-list cmd startfile)))))
-
-(defun tbox-fix-ncb ()
-  "Determines IP of active NCB"
-  (interactive)
-  (let* ((ip1 "172.16.4.146")
-         (ip2 "172.16.4.242")
-         (cmd (concat "ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ip1 " gsh get_active_ncb"))
-         (gsh_output (tbox-cmd-to-string cmd)))
-    (if (or (string-match "EquipmentId:" gsh_output) (string-match "CLI is currently not available" gsh_output))
-        (setq ncb-ip ip1)
-      (setq ncb-ip ip2))))
 ;; Seems term-scroll-with-delete is re-set by some term-set-scroll-region...
 ;;(advice-add 'term-set-scroll-region :filter-return
 ;;            #'(lambda (r)
@@ -791,80 +797,6 @@ editing control characters:
   (ad-set-arg 1 (nth 1 (my-strip-input r))))
 (ad-activate 'ring-insert)
 
-;;/local/tecsas/3pp/bin/screen -list  
-(defun tbox-screen(host_suffix &optional inputname historyfile ncb)
-  (interactive "sScreen host suffix: ")
-  (let* ((name (if inputname inputname host_suffix))
-         (screen_name (concat "*" name "*"))
-         (historyfile (if historyfile historyfile "~/.screen_history"))
-         )
-    (if (get-buffer-process (get-buffer screen_name))
-        (switch-to-buffer screen_name)
-      (fix-tecsas-env)
-      (let* ((tbox_host (shell-command-to-string (concat "cat " (getenv "tecsas") "/TECSAS_HOST_ADDRESS | sed 's/^[0-9.]* //g'")))
-             (host (concat tbox_host "_" host_suffix))
-             (screen_cmd  (concat "/local/tecsas/3pp/bin/screen -d -r -S " host " -e^ad")))
-        (tbox-make-term ncb name screen_cmd nil inputname)
-        (switch-to-buffer screen_name)
-        (compilation-shell-minor-mode 1)
-        (setq compilation-scroll-output nil)
-        (my-term-shell-mode-hook)
-        (local-set-key [(control tab)] 'dabbrev-expand)
-        (local-set-key [return]        'my-compile-goto-error)
-        ;;(add-function :before (process-filter (get-buffer-process (get-buffer screen_name))) #'(lambda (proc str) (my-tbox-strip-cshrc-echos str)))
-      ;;  (add-function :filter-return (local 'eshell-post-rewrite-command-function)
-      ;;                #'eshell--apply-redirections))
-      ;;(add-function :override (process-filter process)
-      ;;              #'gud-tooltip-process-output)
-        ;;(comint-mode)
-        ;;(add-hook 'term-preoutput-filter-functions 'my-tbox-strip-cshrc-echos nil t))))
-        (if (and historyfile (file-readable-p historyfile))
-            (progn
-              (make-local-variable 'term-input-ring-file-name)
-              (setq term-input-ring-file-name historyfile)
-              (term-read-input-ring)
-              ))
-        ;;(setq term-prompt-regexp "^[^<>=,]*> ?")
-        (setq term-prompt-regexp "^\\([^<>=,]*> ?\\|==.+ ~ # \\)")
-        ;;;;Don't use compilation
-        ;;(make-local-variable 'inferior-erlang-use-cmm)
-        ;;(setq inferior-erlang-use-cmm nil)
-        ;;(erlang-shell-mode)
-        ;;(if (and historyfile (file-readable-p historyfile))
-        ;;    (progn
-        ;;      (setq-local comint-input-ring-file-name historyfile)
-        ;;      (comint-read-input-ring t)))
-        ;; Don't complete filename
-        (setq-local term-dynamic-complete-functions
-              (append (list 'term-replace-by-expanded-history 'my-erlang-send-tab)))
-        (setq-local term-scroll-with-delete nil)
-        (make-local-variable     'find-tag-default-function)
-        (setq-local find-tag-default-function 'my-erlang-find-tag-default))
-      ;; Return new if new tbox has been started
-      (run-at-time 2 nil 'my-term-highlight-all-prompts)
-      )))
-      ;;(setq comint-process-echoes t))))
-
-
-;; Copied from `inferior-erlang-strip-ctrl-m'.
-(defun my-tbox-strip-cshrc-echos (&optional string)
-  "Strip trailing \"echoes\" from .cshrc"
-  (interactive)
-  (if (string-match "^\\(]2;\\|Welcome hårdrockarn\\).+$" string)
-      ""
-    string))
-
-
-  ;;(if (and (boundp 'comint-last-input-end)
-  ;;         (boundp 'comint-last-output-start))
-  ;;    (let ((pmark (process-mark (get-buffer-process (current-buffer)))))
-  ;;      (save-excursion
-  ;;        (goto-char
-  ;;         (if (interactive-p)
-  ;;             (symbol-value 'comint-last-input-end)
-  ;;           (symbol-value 'comint-last-output-start)))
-  ;;        (while (re-search-forward "^]2;.+$" pmark t)
-  ;;          (replace-match "" t t))))))
 (defun gtt ()
   (interactive)
   (if (and (not (file-readable-p "/tmp/gtt.fifo")) (file-readable-p "/tmp/erlang.pipe.1.r"))
@@ -923,6 +855,7 @@ editing control characters:
         (switch-to-buffer proc-name)
       (if (file-readable-p "/tmp/erlang.pipe.1.r")
           (make-comint name "gsh")
+        (fix-tecsas-env)
         (tbox-make-comint "ncb" name "gsh"))
       (switch-to-buffer proc-name)
       (if (not (file-readable-p "/tmp/erlang.pipe.1.r"))
@@ -948,35 +881,31 @@ editing control characters:
 
 (defun fix-tecsas-env ()
   (interactive)
+  (init-tbox-paramaters)
+  (update-tecsas-env-from-tbox))
   ;; [pl] -> (proj\|local)
-  (let* ((ls-result (shell-command-to-string (concat "echo -n `ls -d /[pl]*/*/tecsas_installations/" (getenv "USER") "/[0-9]/$GSN_WS_NAME`")))
-         (paths (if (string-match ":" ls-result) nil (split-string ls-result " "))))
-    (if (not paths)
-        ;; Nothing found - strange path? Ask Tbox
-        (progn
-          (setq tbox-session "0")
-          (update-tecsas-env-from-tbox))
-      (dolist (path paths)
-        (setq tbox-session (replace-regexp-in-string ".*/\\([0-9]+\\)/.*" "\\1" path))
-        (setenv "tecsas" path)
-        (if (> (length paths) 1)
-            ;; Multiple sessions - ask tbox about active one
-            (if (is-tbox-session-correct) (return)))))))
-
-(defun is-tbox-session-correct ()
-  (not (eq (string-match (getenv "GSN_WS_NAME") (get-tbox-installation)) nil)))
-
-(defun get-tbox-installation() 
-  (let ((tbox-result (tbox-cmd-to-string "find \\$TECSAS_INSTALLATION_ROOT -type d -maxdepth 1 -mindepth 1")))
-    (if (string-match ".*\\(^/\\(proj\\|local\\).*\\)$" tbox-result)
-        (match-string 0 tbox-result)
-      nil)))
+  ;;(let* ((ls-result (shell-command-to-string (concat "echo -n `ls -d /[pl]*/*/tecsas_installations/" (getenv "USER") "/[0-9]/$GSN_WS_NAME`")))
+  ;;       (paths (if (string-match ":" ls-result) nil (split-string ls-result " "))))
+  ;;  (if (not paths)
+  ;;      ;; Nothing found - strange path? Ask Tbox
+  ;;      (progn
+  ;;        (setq tbox-session "0")
+  ;;        (update-tecsas-env-from-tbox))
+  ;;    (dolist (path paths)
+  ;;      (setq tbox-session (replace-regexp-in-string ".*/\\([0-9]+\\)/.*" "\\1" path))
+  ;;      (setenv "tecsas" path)
+  ;;      (if (> (length paths) 1)
+  ;;          ;; Multiple sessions - ask tbox about active one
+  ;;          (if (is-tbox-session-correct) (return)))))))
 
 (defun update-tecsas-env-from-tbox ()
   (let ((tbox-result (get-tbox-installation)))
-    (if tbox-result (setenv "tecsas" tbox-result))
-    )
-  )
+    (if tbox-result
+        (if (file-directory-p (concat tbox-result "/logs"))
+            (setenv "tecsas" tbox-result)
+          ;; assume container
+          (get-tbox-pods) ;; Just init...
+          (setenv "tecsas" (concat "/tbox:" tbox-session ":/tmp"))))))
 
 (defvar my-diaspec-imenu-generic-expression
   `(

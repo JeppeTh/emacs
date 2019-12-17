@@ -28,7 +28,9 @@
         (add-hook 'magit-revision-sections-hook (lambda (TAG) 
                                                   (interactive) 
                                                   (local-set-key [(control tab)] 'magit-section-cycle-diffs)
-                                                  (local-set-key [(control return)] 'my-git-show-commit-at-point)))
+                                                  (local-set-key [(control return)] 'my-git-show-commit-at-point)
+                                                  (local-set-key "\C-c " 'my-git-show-child-commit)
+                                                  ))
         (global-set-key "\C-xvs" 'magit-status)
         (global-set-key "\C-xv?" 'magit-log-buffer-file)
         (define-key magit-blame-mode-map "e"      'my-git-blame-ediff)
@@ -46,6 +48,11 @@
 (defun my-git-show-commit-at-point ()
   (interactive)
   (magit-show-commit (magit-commit-at-point)))
+
+(defun my-git-show-child-commit ()
+  (interactive)
+  (magit-show-commit (car (magit-commit-children magit-buffer-revision-hash))))
+
 
 (defun my-git-ediff-pred-at-point ()
   (interactive)
@@ -328,3 +335,17 @@
             (name    (replace-regexp-in-string (getenv "GSN_WS_ROOT") "$GSN_WS_ROOT" name)))
         (replace-regexp-in-string "\\([^@]+\\)\\(@@.+\\)?$" (concat "\\1@@" version) name))
     name))
+
+(defun git-grep (what)
+    "Run git grep on WHAT in current repo."
+    (interactive)
+    (let ((top-dir (magit-toplevel)))
+      (my-compilation-start (concat "git grep --full-name -ni " what " " top-dir) 
+                            nil
+                            (lambda (n) "*git-grep*"))
+      (if (not (string-equal "*git-grep*" (buffer-name)))
+          (switch-to-buffer-other-window "*git-grep*"))
+      (cd top-dir)
+      ;;(grep-mode)
+      )
+)

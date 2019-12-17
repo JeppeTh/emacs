@@ -128,7 +128,7 @@
   (setq auto-fill-function       'do-auto-fill)
   (setq fill-column              80)
   (setq imenu-generic-expression my-idl-imenu-generic-expression)
-  (add-to-list 'which-func-modes       'idl-mode)
+  ;;(add-to-list 'which-func-modes       'idl-mode)
 ;  (modify-syntax-entry ?: "_") ;; No support for class::member
 
   ;; Copied font-lock settings from c++-mode

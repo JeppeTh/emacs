@@ -107,6 +107,15 @@
 (setq-default ipa-file "/proj/sgsn_rest/work/ervjest/.ipa")
 (add-hook 'ipa-mode-hook (lambda () (auto-revert-mode t)))
 
+(defun decode-ipa ()
+  (interactive)
+  (goto-char (point-min))
+  (while (re-search-forward "^ +" nil t)
+    (replace-match ""))
+  (goto-char (point-min))
+  (while (re-search-forward "^(pos.+:line" nil t)
+    (replace-match "line")))
+
 (put 'upcase-region 'disabled nil)
 (put 'downcase-region 'disabled nil)
 
@@ -871,6 +880,11 @@ On attempt to pass beginning of prompt, stop and signal error."
     (if (> linenum 0)
         (forward-line (1- linenum)))))
 
+(defun my-string-match (regexp data num)
+  (interactive)
+  (string-match regexp data)
+  (match-string num data))
+
 (defun make-wiki-entry ()
   (interactive)
   (beginning-of-line)
@@ -902,17 +916,3 @@ On attempt to pass beginning of prompt, stop and signal error."
 ;;; End .emacs
 (if (featurep 'benchmark-init-loaddefs)
     (benchmark-init/deactivate))
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(package-selected-packages
-   (quote
-    (ghub transient marmalade json-mode hideshowvis docker-tramp debbugs anything annotate))))
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )

@@ -15,6 +15,7 @@
       (defalias 'browse-url-text-emacs 'browse-url-lynx-emacs)
       ;; interactive-p has been renamed
       (defalias 'called-interactively-p 'interactive-p)
+      (defalias 'lazy-highlight 'isearch-lazy-highlight-face)
       ))
 
 (if (< emacs-major-version 22)
