@@ -327,12 +327,15 @@
 
 (defun my-git-expand-file-name-with-version (name)
   (if (my-is-in-git)
-      (let ((version (if magit-buffer-revision
-                         magit-buffer-revision
-                       (if magit-buffer-refname
-                           magit-buffer-refname
-                         (magit-rev-parse "HEAD"))))
-            (name    (replace-regexp-in-string (getenv "GSN_WS_ROOT") "$GSN_WS_ROOT" name)))
+      (let* ((version (if magit-buffer-revision
+                          magit-buffer-revision
+                        (if magit-buffer-refname
+                            magit-buffer-refname
+                          (magit-rev-parse "HEAD"))))
+             (gsn_ws_root (getenv "GSN_WS_ROOT"))
+             (name (if gsn_ws_root
+                       (replace-regexp-in-string gsn_ws_root "$GSN_WS_ROOT" name)
+                     name)))
         (replace-regexp-in-string "\\([^@]+\\)\\(@@.+\\)?$" (concat "\\1@@" version) name))
     name))
 
