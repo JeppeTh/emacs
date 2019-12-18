@@ -84,13 +84,16 @@ containing a tab or beginning with a '('."
         nil
       (my-send-tab))))
 
+(defun my-ring-ref (ring index)
+  (and (> (ring-length ring) 0) (ring-ref ring index)))
+
 (defun my-send-tab ()
   "Sends a tab to the shell to get completions on input"
   (interactive)
   (let* ((org-term-fun term-input-sender)
          (org-comint-fun comint-input-sender)
          (used-ring (if my-term-shell-mode term-input-ring comint-input-ring))
-         (last-history (ring-ref used-ring 0)))
+         (last-history (my-ring-ref used-ring 0)))
     (condition-case nil
         (progn
           (setq-local term-input-sender (function my-simple-send))
@@ -99,7 +102,7 @@ containing a tab or beginning with a '('."
           (if my-term-shell-mode
               (term-send-input)
             (comint-send-input))
-          (if (not (eq last-history (ring-ref used-ring 0)))
+          (if (not (eq last-history (my-ring-ref used-ring 0)))
               (ring-remove used-ring 0))
           )
       (quit
@@ -128,11 +131,11 @@ for completion since a backspace then must also be sent to the shell."
 
 (defun my-send-return ()
   (interactive)
-  (let* ((cmd (if my-term-shell-mode 
-                  (term-get-old-input-default) 
+  (let* ((cmd (if my-term-shell-mode
+                  (term-get-old-input-default)
                 (comint-get-old-input-default)))
          (used-ring (if my-term-shell-mode term-input-ring comint-input-ring))
-         (last-history (ring-ref used-ring 0))
+         (last-history (my-ring-ref used-ring 0))
          )
     (if my-term-shell-mode
         (term-send-input)
@@ -140,13 +143,13 @@ for completion since a backspace then must also be sent to the shell."
     ;; If beginning of cmd is completed by shell, only the typed arguments
     ;; will be stored in the history. Replace this entry with the complete
     ;; command in that case.
-    (if (and (not (string-equal (ring-ref used-ring 0) cmd))
-             (not (string-equal (ring-ref used-ring 0) last-history)))
+    (if (and (not (string-equal (my-ring-ref used-ring 0) cmd))
+             (not (string-equal (my-ring-ref used-ring 0) last-history)))
         (ring-remove used-ring 0))
     ;; Insert cmd as last entry in history in case it been filtered out or
     ;; removed
-      (if (not (string-equal (ring-ref used-ring 0) cmd))
-          (ring-insert used-ring cmd))))
+    (if (not (string-equal (my-ring-ref used-ring 0) cmd))
+        (ring-insert used-ring cmd))))
 
 (defun my-erlang-quit ()
   (interactive)
