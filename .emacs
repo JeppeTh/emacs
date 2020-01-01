@@ -199,7 +199,9 @@
       (progn
         (setq-local shell-dirstack-query "cd")
         (setq-local comint-process-echoes t)
-        (setq-local comint-input-ring-file-name "~/.dos_history")
+        (if (equal "*wsl*" (buffer-name))
+            (setq-local comint-input-ring-file-name "~/.wsl_history")
+          (setq-local comint-input-ring-file-name "~/.dos_history"))
         (comint-read-input-ring))))
 
 (add-hook 'shell-mode-hook 'my-shell-mode-hook t)
@@ -508,6 +510,16 @@ On attempt to pass beginning of prompt, stop and signal error."
     t
     ))
 
+(defun my-send-backspace ()
+  "Sends a backspace to the shell. Useful when using `my-send-tab' 
+for completion since a backspace then must also be sent to the shell."
+  (interactive)
+  (let ((home-pos (save-excursion (if my-term-shell-mode (term-bol nil) (comint-bol nil)))))
+    (if (eq home-pos (point))
+        (error "At prompt")
+      (let ((proc (get-buffer-process (current-buffer))))
+        (process-send-string proc (char-to-string 127))))))
+
 (defun my-send-input ()
   (if my-term-shell-mode
       (term-send-input)
@@ -727,12 +739,39 @@ On attempt to pass beginning of prompt, stop and signal error."
 )
 
 ;; My own functions
-
-(defun bash-shell ()
+(defun wsl ()
   (interactive)
-  (let ((explicit-shell-file-name "c:/windows/sysnative/bash.exe"))
-    (shell)
-    (term-send-string (get-buffer-process (buffer-name)) "PS1='\\w\\$ '\n")))
+  (let ((explicit-shell-file-name "C:/Windows/System32/bash.exe"))
+    (if (< emacs-major-version 26)
+        (setq explicit-shell-file-name "c:/windows/sysnative/bash.exe"))
+    (shell "*wsl*")
+    (add-hook 'comint-preoutput-filter-functions 'my-comint-strip-completion-echoes nil t)
+    (setq comint-dynamic-complete-functions (list 'my-send-tab))
+    (local-set-key [(control backspace)] 'my-send-backspace)
+    (local-set-key [return]              'my-send-return)
+    (setq comint-prompt-regexp "^[^>]+> ")
+    (comint-send-string (get-buffer-process (buffer-name)) "PS1='\\w> '\n")))
+
+(defun my-comint-strip-completion-echoes (&optional string)
+  "Strips echoed completions"
+  (interactive)
+  (let* (;;(sent-cmd (my-ring-ref comint-input-ring 0))
+         (sent-cmd (buffer-substring comint-last-input-start comint-last-input-end))
+         (cmd (replace-regexp-in-string "	\n" "" sent-cmd))
+         (string (replace-regexp-in-string "[]" "" string))
+         (completion (string-remove-prefix cmd string))
+         ;; -2 = Tab+Newline
+         (end-pos (- comint-last-input-end 2)))
+    (if (string-match "	\n" sent-cmd)
+        (if (string-prefix-p cmd string)
+            (progn
+              (delete-region end-pos comint-last-input-end)
+              completion)
+          (if (equal "" string)
+              (delete-region end-pos comint-last-input-end)
+            )
+          string)
+      string)))
 
 ;;;;;;;;;;;;;;;;;;;
 (defun my-compile ()

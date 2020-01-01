@@ -92,16 +92,6 @@ containing a tab or beginning with a '('."
       (term-kill-input)
     (comint-kill-input)))
 
-(defun my-send-backspace ()
-  "Sends a backspace to the shell. Useful when using `my-send-tab' 
-for completion since a backspace then must also be sent to the shell."
-  (interactive)
-  (let ((home-pos (save-excursion (if my-term-shell-mode (term-bol nil) (comint-bol nil)))))
-    (if (eq home-pos (point))
-        (error "At prompt")
-      (let ((proc (get-buffer-process (current-buffer))))
-        (process-send-string proc (char-to-string 127))))))
-
 (defun my-erlang-quit ()
   (interactive)
   (inferior-erlang-send-command "")
