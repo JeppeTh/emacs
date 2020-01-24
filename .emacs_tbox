@@ -1,7 +1,7 @@
 ;;(shell-command-to-string (concat "sh -c '. /proj/tecsas-scratch/var/tbox/sessions/" user-login-name "_0.lock; echo ${TBOX_HOST}-tb${TBOX_INSTANCE}'"))
 (defvar tbox-session "0")
 (defvar tbox-host nil)
-(defun init-tbox-paramaters ()
+(defun init-tbox-parameters ()
   (interactive)
   (let* ((session-data (shell-command-to-string "echo -n `grep -l -e \"$GSN_WS_NAME\"$ /proj/tecsas-scratch/var/tbox/sessions/\"$USER\"_*.lock`|xargs cat $1")))
     (setq tbox-session (my-string-match "TBOX_SESSION=\\([0-9]+\\)" session-data 1))
@@ -9,7 +9,7 @@
     (setq tbox-host (concat (my-string-match "TBOX_HOST=\\(.+\\)$" session-data 1)
                             "-tb"
                             (my-string-match "TBOX_INSTANCE=\\([0-9]+\\)" session-data 1)))))
-(init-tbox-paramaters)
+(init-tbox-parameters)
 (if (null explicit-shell-file-name)
     (setq-default explicit-shell-file-name shell-file-name))
 (require 'tramp)
@@ -75,6 +75,7 @@
 (defun get-tbox-pods ()
   (if tbox-pods
       tbox-pods
+    (init-tbox-parameters)
     (let ((cmd-output (tbox-cmd-to-string "kubectl get pods -o name"))
           (start 0)
           (pods (list)))
@@ -91,14 +92,21 @@
 (defun connect-tbox-pod ()
   (interactive)
   (let* ((pods (get-tbox-pods))
-         (pod (completing-read "Pod: " (append (list "all") pods)  nil nil nil 'tbox-pods--history-list "all")))
-    (if (equal pod "all")
-        (dolist (pod pods) (tbox-pod pod))
-      (tbox-pod pod))))
+         (pod (completing-read "Pod: " (append (list "*Refresh*" "all") pods)  nil nil nil 'tbox-pods--history-list "all")))
 
-(defun tbox-pod (pod)
-  (find-file (concat "/tbox-pod:" pod "@" tbox-session ":/")))
+    (cond ((equal pod "*Refresh*")
+           (setq tbox-pods nil)
+           (connect-tbox-pod))
+          ((equal pod "all")
+           (dolist (pod pods) (tbox-pod-term pod)))
+          (t
+           (tbox-pod-term pod)
+           ))))
 
+(defun tbox-pod-term (pod &optional historyfile) 
+  (interactive)
+  (tbox-make-term nil pod (concat "kubectl exec -it " pod " tcsh"))
+  (cd (concat "/tbox-pod:" pod "@" tbox-session ":/")))
 
 (defvar ncb-ip "172.16.4.146")
 (defun tbox-fix-ncb ()
@@ -130,73 +138,74 @@
         (setq program "/tmp/DPE_SC/LoadUnits/ttx/int/bin/to_erl"))
     (concat "\"kubectl exec -it " (get-ncb-pod) " " program "\"")))
 
-(defun tbox-make-term (is-ncb name program &optional startfile &rest switches)
-
-  (let* ((cmd (if is-ncb
+(defun tbox-make-term (is-ncb name program &optional startfile historyfile &rest switches)
+  (let* ((term-buffer-name (concat "*" name "*"))
+         (cmd (if is-ncb
                   (concat "\"ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ncb-ip " " program)
                 (concat "\" " program)))
          (cmd (if (not switches) 
                   cmd
                 (dolist (switch switches cmd) (setq cmd (concat cmd  " " switch)))))
          (cmd (concat cmd "\"")))
-    (apply 'make-term (append (list name) (make-tbox-cmd-list cmd startfile)))))
+    (if (get-buffer-process (get-buffer term-buffer-name))
+        (switch-to-buffer term-buffer-name)
+      (apply 'make-term (append (list name) (make-tbox-cmd-list cmd startfile)))
+      (switch-to-buffer term-buffer-name)
+      (compilation-shell-minor-mode 1)
+      (setq compilation-scroll-output nil)
+      (my-term-shell-mode-hook)
+      (local-set-key [(control backspace)] 'my-send-backspace)
+      (local-set-key [(control tab)] 'dabbrev-expand)
+      (local-set-key [return]        'my-compile-goto-error)
+      ;;(add-function :before (process-filter (get-buffer-process (get-buffer screen_name))) #'(lambda (proc str) (my-tbox-strip-cshrc-echos str)))
+      ;;  (add-function :filter-return (local 'eshell-post-rewrite-command-function)
+      ;;                #'eshell--apply-redirections))
+      ;;(add-function :override (process-filter process)
+      ;;              #'gud-tooltip-process-output)
+      ;;(comint-mode)
+      ;; There is no term-preoutput-filter-functions...
+      ;;(add-hook 'term-preoutput-filter-functions 'my-tbox-strip-cshrc-echos nil t))))
+      (if (and historyfile (file-readable-p historyfile))
+          (progn
+            (make-local-variable 'term-input-ring-file-name)
+            (setq term-input-ring-file-name historyfile)
+            (term-read-input-ring)
+            ))
+      ;;(setq term-prompt-regexp "^[^<>=,]*> ?")
+      (setq term-prompt-regexp "^\\([^<>=,]*> ?\\|==.+ # \\)")
+        ;;;;Don't use compilation
+      ;;(make-local-variable 'inferior-erlang-use-cmm)
+      ;;(setq inferior-erlang-use-cmm nil)
+      ;;(erlang-shell-mode)
+      ;;(if (and historyfile (file-readable-p historyfile))
+      ;;    (progn
+      ;;      (setq-local comint-input-ring-file-name historyfile)
+      ;;      (comint-read-input-ring t)))
+      ;; Don't complete filename
+      (setq-local term-dynamic-complete-functions
+                  (append (list 'term-replace-by-expanded-history 'my-send-tab)))
+      (setq-local term-scroll-with-delete nil)
+      (make-local-variable     'find-tag-default-function)
+      (setq-local find-tag-default-function 'my-erlang-find-tag-default)
+      (run-at-time 2 nil 'my-term-highlight-all-prompts)
+      ;;(setq comint-process-echoes t))))
+      )))
 
 ;;/local/tecsas/3pp/bin/screen -list  
 (defun tbox-screen(host_suffix &optional inputname historyfile is-ncb)
   (interactive "sScreen host suffix: ")
   (let* ((name (if inputname inputname host_suffix))
-         (screen_name (concat "*" name "*"))
+         (screen-name (concat "*" name "*"))
          (historyfile (if historyfile historyfile "~/.screen_history"))
          )
-    (if (get-buffer-process (get-buffer screen_name))
-        (switch-to-buffer screen_name)
+    (if (get-buffer-process (get-buffer screen-name))
+        (switch-to-buffer screen-name)
       (fix-tecsas-env)
       (let* (
              ;;(tbox_host (shell-command-to-string (concat "cat " (getenv "tecsas") "/TECSAS_HOST_ADDRESS | sed 's/^[0-9.]* //g'")))
              (host (concat tbox-host "_" host_suffix))
-             (screen_cmd  (concat "/local/tecsas/3pp/bin/screen -d -r -S " host " -e^ad")))
-        (tbox-make-term is-ncb name screen_cmd nil inputname)
-        (switch-to-buffer screen_name)
-        (compilation-shell-minor-mode 1)
-        (setq compilation-scroll-output nil)
-        (my-term-shell-mode-hook)
-        (local-set-key [(control backspace)] 'my-send-backspace)
-        (local-set-key [(control tab)] 'dabbrev-expand)
-        (local-set-key [return]        'my-compile-goto-error)
-        ;;(add-function :before (process-filter (get-buffer-process (get-buffer screen_name))) #'(lambda (proc str) (my-tbox-strip-cshrc-echos str)))
-      ;;  (add-function :filter-return (local 'eshell-post-rewrite-command-function)
-      ;;                #'eshell--apply-redirections))
-      ;;(add-function :override (process-filter process)
-      ;;              #'gud-tooltip-process-output)
-        ;;(comint-mode)
-        ;;(add-hook 'term-preoutput-filter-functions 'my-tbox-strip-cshrc-echos nil t))))
-        (if (and historyfile (file-readable-p historyfile))
-            (progn
-              (make-local-variable 'term-input-ring-file-name)
-              (setq term-input-ring-file-name historyfile)
-              (term-read-input-ring)
-              ))
-        ;;(setq term-prompt-regexp "^[^<>=,]*> ?")
-        (setq term-prompt-regexp "^\\([^<>=,]*> ?\\|==.+ # \\)")
-        ;;;;Don't use compilation
-        ;;(make-local-variable 'inferior-erlang-use-cmm)
-        ;;(setq inferior-erlang-use-cmm nil)
-        ;;(erlang-shell-mode)
-        ;;(if (and historyfile (file-readable-p historyfile))
-        ;;    (progn
-        ;;      (setq-local comint-input-ring-file-name historyfile)
-        ;;      (comint-read-input-ring t)))
-        ;; Don't complete filename
-        (setq-local term-dynamic-complete-functions
-              (append (list 'term-replace-by-expanded-history 'my-send-tab)))
-        (setq-local term-scroll-with-delete nil)
-        (make-local-variable     'find-tag-default-function)
-        (setq-local find-tag-default-function 'my-erlang-find-tag-default))
-      ;; Return new if new tbox has been started
-      (run-at-time 2 nil 'my-term-highlight-all-prompts)
-      )))
-      ;;(setq comint-process-echoes t))))
-
+             (screen-cmd  (concat "/local/tecsas/3pp/bin/screen -d -r -S " host " -e^ad")))
+        (tbox-make-term is-ncb name screen-cmd nil historyfile inputname)))))
 
 ;; Copied from `inferior-erlang-strip-ctrl-m'.
 (defun my-tbox-strip-cshrc-echos (&optional string)

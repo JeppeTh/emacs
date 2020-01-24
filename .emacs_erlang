@@ -102,6 +102,7 @@ containing a tab or beginning with a '('."
           (if my-term-shell-mode
               (term-send-input)
             (comint-send-input))
+          (run-at-time 0.1 nil 'my-strip-completion-tab)
           (if (not (eq last-history (my-ring-ref used-ring 0)))
               (ring-remove used-ring 0))
           )
@@ -111,7 +112,13 @@ containing a tab or beginning with a '('."
        nil))
     (setq-local term-input-sender org-term-fun)
     (setq-local comint-input-sender org-comint-fun)
+    t
     ))
+
+(defun my-strip-completion-tab ()
+  "Removes trailing tabs when no further completion is possible."
+  (if (re-search-backward  "\\(	+$\\)" (point-at-bol) t)
+      (replace-match "")))
 
 (defun my-simple-send (proc string)
   "As `term-simple-send'/`comint-simple-send' but skips the newline."
@@ -137,6 +144,7 @@ for completion since a backspace then must also be sent to the shell."
          (used-ring (if my-term-shell-mode term-input-ring comint-input-ring))
          (last-history (my-ring-ref used-ring 0))
          )
+    (end-of-line)
     (if my-term-shell-mode
         (term-send-input)
       (comint-send-input))
@@ -838,7 +846,8 @@ editing control characters:
   (add-hook 'kill-buffer-hook 'kill-hook-comint-send-eof)
   (set (make-local-variable 'my-term-keymap) (copy-keymap (current-local-map)))
   (use-local-map my-term-keymap)
-  (local-set-key "\C-xr" 'tecsas))
+  (local-set-key "\C-xr" 'tecsas)
+  (cd (getenv "tecsas")))
 
 
 (defun kill-hook-comint-send-eof()
@@ -884,7 +893,7 @@ editing control characters:
 
 (defun fix-tecsas-env ()
   (interactive)
-  (init-tbox-paramaters)
+  (init-tbox-parameters)
   (update-tecsas-env-from-tbox))
   ;; [pl] -> (proj\|local)
   ;;(let* ((ls-result (shell-command-to-string (concat "echo -n `ls -d /[pl]*/*/tecsas_installations/" (getenv "USER") "/[0-9]/$GSN_WS_NAME`")))

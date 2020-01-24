@@ -339,6 +339,30 @@
         (replace-regexp-in-string "\\([^@]+\\)\\(@@.+\\)?$" (concat "\\1@@" version) name))
     name))
 
+(defun my-git-fix-messed-up-modtime ()
+  "Updates the buffers modtime in case file has been messed up by backup system"
+  (interactive)
+  (if (or (not (my-is-in-git))
+          buffer-read-only
+          (not (is-modtime-messed-up)))
+      nil
+    (set-visited-file-modtime)
+    t))
+
+(defun is-modtime-messed-up ()
+  "Checks if last decimals of files mtime has been lost by backup system"
+  (interactive)
+  (and  (not (verify-visited-file-modtime))
+        (equal (nth 5 (file-attributes buffer-file-name))
+               (nconc (butlast (visited-file-modtime)) (list 0)))))
+
+(defun my-ask-user-about-supersession-threat (orig-fun &rest args)
+  "Advice function to handle that backup system messes up mtime"
+  (if (not (my-git-fix-messed-up-modtime))
+      (apply orig-fun args)))
+
+(advice-add 'ask-user-about-supersession-threat :around #'my-ask-user-about-supersession-threat)
+
 (defun git-grep (what)
     "Run git grep on WHAT in current repo."
     (interactive)
