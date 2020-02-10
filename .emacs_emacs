@@ -80,6 +80,7 @@
 
 (add-hook 'ediff-prepare-buffer-hook 
           '(lambda() 
+             (my-git-fix-messed-up-modtime)
              ;; Check if buffer needs revert,
              (if (not (verify-visited-file-modtime (current-buffer)))
                  (revert-buffer))

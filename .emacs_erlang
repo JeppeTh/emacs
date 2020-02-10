@@ -847,8 +847,13 @@ editing control characters:
   (set (make-local-variable 'my-term-keymap) (copy-keymap (current-local-map)))
   (use-local-map my-term-keymap)
   (local-set-key "\C-xr" 'tecsas)
-  (cd (getenv "tecsas")))
+  (cd (tecsas-dir)))
 
+(defun tecsas-dir ()
+  (let ((tecsas-dir (or (getenv "tecsas") (fix-tecsas-env))))
+    (if (not tecsas-dir)
+        (error "Tecsas ENV not set")
+      tecsas-dir)))
 
 (defun kill-hook-comint-send-eof()
   "Manage that process is dead"
@@ -881,10 +886,10 @@ editing control characters:
 
 (defun gl ()
   (interactive)
-  (let* ((newgldir (concat (getenv "tecsas") "/logs/ncs_trace"))
-         (gldir (if (file-readable-p newgldir)t
+  (let* ((newgldir (concat (tecsas-dir) "/logs/ncs_trace"))
+         (gldir (if (file-readable-p newgldir)
                     newgldir
-                  (concat (getenv "tecsas") "/logs")))
+                  (concat (tecsas-dir) "/logs")))
          (cwd default-directory))
     (cd gldir)
     (shell-command "gl")
@@ -893,8 +898,8 @@ editing control characters:
 
 (defun fix-tecsas-env ()
   (interactive)
-  (init-tbox-parameters)
-  (update-tecsas-env-from-tbox))
+  (update-tecsas-env-from-tbox)
+  (getenv "tecsas"))
   ;; [pl] -> (proj\|local)
   ;;(let* ((ls-result (shell-command-to-string (concat "echo -n `ls -d /[pl]*/*/tecsas_installations/" (getenv "USER") "/[0-9]/$GSN_WS_NAME`")))
   ;;       (paths (if (string-match ":" ls-result) nil (split-string ls-result " "))))

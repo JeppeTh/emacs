@@ -1,15 +1,39 @@
 ;;(shell-command-to-string (concat "sh -c '. /proj/tecsas-scratch/var/tbox/sessions/" user-login-name "_0.lock; echo ${TBOX_HOST}-tb${TBOX_INSTANCE}'"))
-(defvar tbox-session "0")
+(defvar tbox-session nil)
 (defvar tbox-host nil)
+(defvar tbox-container-session nil)
+
 (defun init-tbox-parameters ()
   (interactive)
-  (let* ((session-data (shell-command-to-string "echo -n `grep -l -e \"$GSN_WS_NAME\"$ /proj/tecsas-scratch/var/tbox/sessions/\"$USER\"_*.lock`|xargs cat $1")))
+  (let* ((lock-file (determine-session-file))
+         (session-data (shell-command-to-string (concat "cat " lock-file))))
     (setq tbox-session (my-string-match "TBOX_SESSION=\\([0-9]+\\)" session-data 1))
     ;;(setenv "tbox-session" tbox-session)
     (setq tbox-host (concat (my-string-match "TBOX_HOST=\\(.+\\)$" session-data 1)
                             "-tb"
-                            (my-string-match "TBOX_INSTANCE=\\([0-9]+\\)" session-data 1)))))
-(init-tbox-parameters)
+                            (my-string-match "TBOX_INSTANCE=\\([0-9]+\\)" session-data 1)))
+    (if (not (string-match "Command not found" (tbox-cmd-to-string "which kubectl")))
+        (setq tbox-container-session tbox-session))))
+
+(defun tbox-session ()
+  (if (not tbox-session)
+      (init-tbox-parameters))
+  tbox-session)
+
+(defun numbers-in-string (string)
+  (replace-regexp-in-string "[^0-9]" "" string))
+
+(defun determine-session-file ()
+  (interactive)
+  (let* ((lock-files (shell-command-to-string "echo -n `grep -l -e \"$GSN_WS_NAME\"$ /proj/tecsas-scratch/var/tbox/sessions/\"$USER\"_*.lock`"))
+         (lock-files (if (string-match "No such file" lock-files) 
+                         (error "no-session") 
+                       (split-string lock-files " ")))
+         (sessions (mapcar #'numbers-in-string lock-files)))
+    (if (> (length sessions) 1)
+        (nth (cl-position (completing-read "Which tbox-session?:" sessions) sessions :test #'equal) lock-files)
+      (car lock-files))))
+
 (if (null explicit-shell-file-name)
     (setq-default explicit-shell-file-name shell-file-name))
 (require 'tramp)
@@ -39,12 +63,12 @@
 
 (defun tbox-pod-completions (ignore)
   (cl-loop for name in (get-tbox-pods)
-           collect (list ""  (concat name "@" tbox-session))))
+           collect (list ""  (concat name "@" (tbox-session)))))
 
 (tramp-set-completion-function "tbox-pod" tbox-pod-completion-function-alist)
 
 (defun make-tbox-cmd-list (cmd &optional startfile)
-  (list "/proj/sgsn-tools/tbox/bin/tbox" startfile "-connect" "-nox11" "-session" tbox-session "-q" "-cmd" cmd))
+  (list "/proj/sgsn-tools/tbox/bin/tbox" startfile "-connect" "-nox11" "-session" (tbox-session) "-q" "-cmd" cmd))
 
 (defun make-tbox-cmd (cmd &optional startfile)
   (mapconcat 'identity (make-tbox-cmd-list cmd startfile) " "))
@@ -75,7 +99,6 @@
 (defun get-tbox-pods ()
   (if tbox-pods
       tbox-pods
-    (init-tbox-parameters)
     (let ((cmd-output (tbox-cmd-to-string "kubectl get pods -o name"))
           (start 0)
           (pods (list)))
@@ -106,7 +129,7 @@
 (defun tbox-pod-term (pod &optional historyfile) 
   (interactive)
   (tbox-make-term nil pod (concat "kubectl exec -it " pod " tcsh"))
-  (cd (concat "/tbox-pod:" pod "@" tbox-session ":/")))
+  (cd (concat "/tbox-pod:" pod "@" (tbox-session) ":/")))
 
 (defvar ncb-ip "172.16.4.146")
 (defun tbox-fix-ncb ()
@@ -129,8 +152,8 @@
                 (concat "\"" program  "\""))))
     (apply 'make-comint (append (list name) (make-tbox-cmd-list cmd startfile)))))
 
-(defun make-ncb-command (program) 
-  (if (not tbox-pods)
+(defun make-ncb-command (program)
+  (if (not (equal tbox-container-session tbox-session))
       (progn
         (tbox-fix-ncb)
         (concat "\"ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ncb-ip " " program "\""))
@@ -202,7 +225,7 @@
         (switch-to-buffer screen-name)
       (fix-tecsas-env)
       (let* (
-             ;;(tbox_host (shell-command-to-string (concat "cat " (getenv "tecsas") "/TECSAS_HOST_ADDRESS | sed 's/^[0-9.]* //g'")))
+             ;;(tbox_host (shell-command-to-string (concat "cat " (tecsas-dir) "/TECSAS_HOST_ADDRESS | sed 's/^[0-9.]* //g'")))
              (host (concat tbox-host "_" host_suffix))
              (screen-cmd  (concat "/local/tecsas/3pp/bin/screen -d -r -S " host " -e^ad")))
         (tbox-make-term is-ncb name screen-cmd nil historyfile inputname)))))
