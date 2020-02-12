@@ -16,6 +16,7 @@
 (make-variable-buffer-local 'frame-title-format)
 (setq-default file-checkedout nil)
 (setq-default mode-line-buffer-identification '(file-checkedout "%b:CHECKEDOUT" "%b"))
+(autoload 'my-git-fix-messed-up-modtime ".emacs_git" nil 1)
 
 (defun my-autoload-git ()
   (interactive)
