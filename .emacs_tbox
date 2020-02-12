@@ -5,34 +5,38 @@
 
 (defun init-tbox-parameters ()
   (interactive)
-  (let* ((lock-file (determine-session-file))
-         (session-data (shell-command-to-string (concat "cat " lock-file))))
-    (setq tbox-session (my-string-match "TBOX_SESSION=\\([0-9]+\\)" session-data 1))
-    ;;(setenv "tbox-session" tbox-session)
-    (setq tbox-host (concat (my-string-match "TBOX_HOST=\\(.+\\)$" session-data 1)
-                            "-tb"
-                            (my-string-match "TBOX_INSTANCE=\\([0-9]+\\)" session-data 1)))
-    (if (not (string-match "Command not found" (tbox-cmd-to-string "which kubectl")))
-        (setq tbox-container-session tbox-session))))
+  (message "Init TBOX parameters.")
+  (let* ((session (determine-session)))
+    ;; "<Session> (<host>)"
+    (setq tbox-session (my-string-match "^\\([0-9]+\\)" session 1))
+    (setq tbox-host (my-string-match "^[0-9]+ (\\([^)]+\\)" session 1)))
+  (message "Checking if container.")
+  (if (not (string-match "Command not found" (tbox-cmd-to-string "which kubectl")))
+      (setq tbox-container-session tbox-session))
+  (message nil))
 
 (defun tbox-session ()
   (if (not tbox-session)
       (init-tbox-parameters))
   tbox-session)
 
-(defun numbers-in-string (string)
-  (replace-regexp-in-string "[^0-9]" "" string))
+(defun session-data-to-string (session-data)
+  (let* ((session (my-string-match "TBOX_SESSION=\\([0-9]+\\)" session-data 1))
+         (host    (my-string-match "TBOX_HOST=\\(.+\\)$" session-data 1))
+         (instance (my-string-match "TBOX_INSTANCE=\\([0-9]+\\)" session-data 1)))
+    (concat session " ("(concat host "-tb" instance) ")")))
 
-(defun determine-session-file ()
+(defun determine-session ()
   (interactive)
-  (let* ((lock-files (shell-command-to-string "echo -n `grep -l -e \"$GSN_WS_NAME\"$ /proj/tecsas-scratch/var/tbox/sessions/\"$USER\"_*.lock`"))
-         (lock-files (if (string-match "No such file" lock-files) 
-                         (error "no-session") 
-                       (split-string lock-files " ")))
-         (sessions (mapcar #'numbers-in-string lock-files)))
+  (let* ((session-data (shell-command-to-string "echo -n `grep -l -e \"$GSN_WS_NAME\"$ /proj/tecsas-scratch/var/tbox/sessions/\"$USER\"_*.lock`|xargs cat $1"))
+         (sessions (if (string-match "No such file" session-data)
+                       nil
+                     (mapcar #'session-data-to-string (split-string session-data "TBOX_CMD" t)))))
+    (if (not sessions)
+        (error "no-session")
     (if (> (length sessions) 1)
-        (nth (cl-position (completing-read "Which tbox-session?:" sessions) sessions :test #'equal) lock-files)
-      (car lock-files))))
+        (completing-read "Select TBOX Session: " sessions nil t)
+      (car sessions)))))
 
 (if (null explicit-shell-file-name)
     (setq-default explicit-shell-file-name shell-file-name))
@@ -214,7 +218,7 @@
       ;;(setq comint-process-echoes t))))
       )))
 
-;;/local/tecsas/3pp/bin/screen -list  
+;;/local/tecsas/3pp/bin/screen -list
 (defun tbox-screen(host_suffix &optional inputname historyfile is-ncb)
   (interactive "sScreen host suffix: ")
   (let* ((name (if inputname inputname host_suffix))
@@ -223,7 +227,6 @@
          )
     (if (get-buffer-process (get-buffer screen-name))
         (switch-to-buffer screen-name)
-      (fix-tecsas-env)
       (let* (
              ;;(tbox_host (shell-command-to-string (concat "cat " (tecsas-dir) "/TECSAS_HOST_ADDRESS | sed 's/^[0-9.]* //g'")))
              (host (concat tbox-host "_" host_suffix))

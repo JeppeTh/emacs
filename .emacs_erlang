@@ -303,7 +303,6 @@ permanently the indentation in Erlang mode would be incorrect."
   (interactive)
   (my-remove-imenu-duplicates (imenu-default-create-index-function)))
 
-(require 'cl)
 (defun my-remove-imenu-duplicates (list)
   "Removes imenu duplicates from Erlang imenu"
   (interactive)
@@ -311,7 +310,7 @@ permanently the indentation in Erlang mode would be incorrect."
         (newlist nil))
     (while orgelement
       (progn
-        (setq list (delete-if (lambda (cell) (equal (car orgelement) (car cell))) list))
+        (setq list (cl-delete-if (lambda (cell) (equal (car orgelement) (car cell))) list))
         (setq newlist (append (list orgelement) newlist))
         (setq orgelement (pop list))))
     (reverse newlist)))
@@ -921,7 +920,6 @@ editing control characters:
         (if (file-directory-p (concat tbox-result "/logs"))
             (setenv "tecsas" tbox-result)
           ;; assume container
-          (get-tbox-pods) ;; Just init...
           (setenv "tecsas" (concat "/tbox:" tbox-session ":/tmp"))))))
 
 (defvar my-diaspec-imenu-generic-expression
