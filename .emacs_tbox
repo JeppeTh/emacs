@@ -228,7 +228,6 @@
     (if (get-buffer-process (get-buffer screen-name))
         (switch-to-buffer screen-name)
       (let* (
-             ;;(tbox_host (shell-command-to-string (concat "cat " (tecsas-dir) "/TECSAS_HOST_ADDRESS | sed 's/^[0-9.]* //g'")))
              (host (concat tbox-host "_" host_suffix))
              (screen-cmd  (concat "/local/tecsas/3pp/bin/screen -d -r -S " host " -e^ad")))
         (tbox-make-term is-ncb name screen-cmd nil historyfile inputname)))))
@@ -256,7 +255,7 @@
 (defun is-tbox-session-correct ()
   (not (eq (string-match (getenv "GSN_WS_NAME") (get-tbox-installation)) nil)))
 
-(defun get-tbox-installation() 
+(defun get-tbox-installation()
   (let ((tbox-result (tbox-cmd-to-string "echo $TECSAS_INSTALLATION_ROOT/$GSN_WS_NAME")))
     (if (string-match ".*\\(^/\\(proj\\|local\\).*\\)$" tbox-result)
         (match-string 0 tbox-result)

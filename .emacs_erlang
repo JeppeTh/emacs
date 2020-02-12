@@ -396,7 +396,7 @@ permanently the indentation in Erlang mode would be incorrect."
                               (while (re-search-forward spec-start-regexp font-lock-end t)
                                 (goto-char (match-end 0)))
                               (match-beginning 0)))
-                                
+
            ;; Now search for the end of the last spec witin region
            (spec-end (if (not last-spec-start)
                          nil
@@ -408,7 +408,7 @@ permanently the indentation in Erlang mode would be incorrect."
                        (goto-char last-spec-start)
                        (re-search-forward spec-end-regexp limit t)))
            )
-      
+
       (if (and spec-start
                spec-end
                (or (< spec-start font-lock-beg) (> spec-end font-lock-end))
@@ -479,13 +479,13 @@ permanently the indentation in Erlang mode would be incorrect."
   ;;(font-lock-add-keywords nil '(
   ;;                              ("^[ 	]*-[ 	]*spec[^.]*\\(\\(\\.\\.+[^.]+\\)*\\(%.+[\n].*\\)*\\)*\\.\\(%.*\\)*$" 0 font-lock-comment-face t)
   ;;                              ("^[ 	]*-[ 	]*spec[^\n]+\\.[	 ]*\\(%.*\\)*$" 0 font-lock-comment-face t)
-                                
+
   ;;                              t)
   ;;                        )
   (font-lock-add-keywords nil '(("^[ 	]*-[ 	]*spec.+\\.[	 ]*\\(%.*\\)?$" 0 font-lock-comment-face t)
 ;;"^[ 	]*-[ 	]*spec.*\n\\(\\(^[^.%\n]+$\\)\\|\\(^.+[^.%\n 	][	 ]*\\(%.*\\)?$\\)\n\\)*"
                                 ("^[ 	]*-[ 	]*spec[^.]*\\(\\(\\.\\.+[^.]+\\)?\\(%.+[\n].*\\)?\\)*\\.\\(%.*\\)?$" 0 font-lock-comment-face t)
-                                
+
                                 ;;("^[ 	]*-[ 	]*spec[^.]*\\(\\(\\.\\.+[^.]+\\)*\\(%.+[\n].*\\)*\\)*\\.\\(%.*\\)*$" 0 font-lock-comment-face t)
 ) t)
   )
@@ -548,7 +548,7 @@ editing control characters:
       ;; New Shell
       (setq inferior-erlang-process-name "inferior-bt_erl")
       (setq inferior-erlang-machine "bt_erl")
-    
+
       (setq inferior-erlang-buffer-name bt-buffer-name)
 
       (setq inferior-erlang-shell-type nil)
@@ -707,7 +707,7 @@ editing control characters:
   (interactive)
   (let* ((result (if (file-readable-p "last_test.html") "last_test.html"))
          (result (if (file-readable-p ".ct_logs/index.html") ".ct_logs/index.html" result)))
-                
+
     (if (not result)
         (message "No html-file found")
       (if (get-buffer-process (get-buffer "*lynx*"))
@@ -899,20 +899,6 @@ editing control characters:
   (interactive)
   (update-tecsas-env-from-tbox)
   (getenv "tecsas"))
-  ;; [pl] -> (proj\|local)
-  ;;(let* ((ls-result (shell-command-to-string (concat "echo -n `ls -d /[pl]*/*/tecsas_installations/" (getenv "USER") "/[0-9]/$GSN_WS_NAME`")))
-  ;;       (paths (if (string-match ":" ls-result) nil (split-string ls-result " "))))
-  ;;  (if (not paths)
-  ;;      ;; Nothing found - strange path? Ask Tbox
-  ;;      (progn
-  ;;        (setq tbox-session "0")
-  ;;        (update-tecsas-env-from-tbox))
-  ;;    (dolist (path paths)
-  ;;      (setq tbox-session (replace-regexp-in-string ".*/\\([0-9]+\\)/.*" "\\1" path))
-  ;;      (setenv "tecsas" path)
-  ;;      (if (> (length paths) 1)
-  ;;          ;; Multiple sessions - ask tbox about active one
-  ;;          (if (is-tbox-session-correct) (return)))))))
 
 (defun update-tecsas-env-from-tbox ()
   (let ((tbox-result (get-tbox-installation)))
@@ -920,7 +906,7 @@ editing control characters:
         (if (file-directory-p (concat tbox-result "/logs"))
             (setenv "tecsas" tbox-result)
           ;; assume container
-          (setenv "tecsas" (concat "/tbox:" tbox-session ":/tmp"))))))
+          (setenv "tecsas" (concat "/tbox:" (tbox-session) ":/tmp"))))))
 
 (defvar my-diaspec-imenu-generic-expression
   `(
@@ -935,7 +921,7 @@ editing control characters:
 (defvar my-diaspec-font-lock
   (list
    (list "^\\s *\\(@[a-zA-Z0-0_-]+\\)\\([^\n]*\\)?\n"
-         (list 1 
+         (list 1
                (if (boundp 'font-lock-preprocessor-face)
                    'font-lock-preprocessor-face ;; Seems new in emacs 22 or something.
                  'font-lock-function-name-face)) (list 2 font-lock-variable-name-face))
