@@ -132,7 +132,7 @@
 
 (defun tbox-pod-term (pod &optional historyfile) 
   (interactive)
-  (tbox-make-term nil pod (concat "kubectl exec -it " pod " tcsh"))
+  (tbox-make-term pod (concat "kubectl exec -it " pod " tcsh"))
   (cd (concat "/tbox-pod:" pod "@" (tbox-session) ":/")))
 
 (defvar ncb-ip "172.16.4.146")
@@ -147,7 +147,7 @@
         (setq ncb-ip ip1)
       (setq ncb-ip ip2))))
 
-(defun tbox-make-comint (is-ncb name program &optional startfile)
+(defun tbox-make-comint (name program &optional is-ncb startfile)
   (let* ((program (if (equal "screen" program)
                       "/local/tecsas/3pp/bin/screen -d -r -S eselnlx1465-tb42_GTT -e^ad"
                     program))
@@ -165,7 +165,7 @@
         (setq program "/tmp/DPE_SC/LoadUnits/ttx/int/bin/to_erl"))
     (concat "\"kubectl exec -it " (get-ncb-pod) " " program "\"")))
 
-(defun tbox-make-term (is-ncb name program &optional startfile historyfile &rest switches)
+(defun tbox-make-term (name program &optional is-ncb startfile historyfile &rest switches)
   (let* ((term-buffer-name (concat "*" name "*"))
          (cmd (if is-ncb
                   (concat "\"ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ncb-ip " " program)
@@ -230,7 +230,7 @@
       (let* (
              (host (concat tbox-host "_" host_suffix))
              (screen-cmd  (concat "/local/tecsas/3pp/bin/screen -d -r -S " host " -e^ad")))
-        (tbox-make-term is-ncb name screen-cmd nil historyfile inputname)))))
+        (tbox-make-term name screen-cmd is-ncb nil historyfile inputname)))))
 
 ;; Copied from `inferior-erlang-strip-ctrl-m'.
 (defun my-tbox-strip-cshrc-echos (&optional string)
@@ -239,7 +239,6 @@
   (if (string-match "^\\(]2;\\|Welcome hårdrockarn\\).+$" string)
       ""
     string))
-
 
   ;;(if (and (boundp 'comint-last-input-end)
   ;;         (boundp 'comint-last-output-start))
@@ -260,3 +259,8 @@
     (if (string-match ".*\\(^/\\(proj\\|local\\).*\\)$" tbox-result)
         (match-string 0 tbox-result)
       nil)))
+
+(defun tbox ()
+  (interactive)
+  (tbox-make-term "tbox" "tcsh" nil nil "~/.tbox_history")
+  (cd (concat "/tbox:" (tbox-session) ":/")))

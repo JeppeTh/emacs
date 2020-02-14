@@ -58,20 +58,20 @@ containing a tab or beginning with a '('."
            (not (eq (string-match "^\(" str) nil)))))
 
 (defun inferior-erlang-strip-ctrl-g (&optional s)
-  "Remove `^G' (delete) and the characters it was supposed to remove."
+  "Strips `^G'. Duplicated from `inferior-erlang-strip-delete'."
   (interactive)
   (if (and (boundp 'comint-last-input-end)
-	   (boundp 'comint-last-output-start))
+           (boundp 'comint-last-output-start))
       (save-excursion
-	(goto-char
-	 (if (called-interactively-p)
-	     (symbol-value 'comint-last-input-end)
-	   (symbol-value 'comint-last-output-start)))
-	(while (progn (skip-chars-forward "^\C-g")
-		      (not (eq (point) (point-max))))
-	  (delete-char 1)
-	  (or (bolp)
-	      (backward-delete-char 1))))))
+        (goto-char
+         (if (called-interactively-p 'interactive)
+             (symbol-value 'comint-last-input-end)
+           (symbol-value 'comint-last-output-start)))
+        (while (progn (skip-chars-forward "^\C-g")
+                      (not (eq (point) (point-max))))
+          (delete-char 1)
+          (or (bolp)
+              (backward-delete-char 1))))))
 
 (defun my-erlang-send-tab ()
   "Sends a tab to the erlang-shell to get completions on input"
@@ -750,7 +750,7 @@ editing control characters:
     (if (get-buffer-process (get-buffer to_erl_name))
         (switch-to-buffer to_erl_name)
       (if is-tbox
-          (tbox-make-comint is-ncb name "erl")
+          (tbox-make-comint name "erl" is-ncb)
         (make-comint name "to_erl" nil pipe))
       (switch-to-buffer to_erl_name)
       (if is-tbox
@@ -872,7 +872,7 @@ editing control characters:
       (if (file-readable-p "/tmp/erlang.pipe.1.r")
           (make-comint name "gsh")
         (fix-tecsas-env)
-        (tbox-make-comint "ncb" name "gsh"))
+        (tbox-make-comint name "gsh" "ncb"))
       (switch-to-buffer proc-name)
       (if (not (file-readable-p "/tmp/erlang.pipe.1.r"))
           (add-hook 'comint-preoutput-filter-functions 'my-tbox-strip-cshrc-echos nil t))
@@ -901,12 +901,9 @@ editing control characters:
   (getenv "tecsas"))
 
 (defun update-tecsas-env-from-tbox ()
-  (let ((tbox-result (get-tbox-installation)))
-    (if tbox-result
-        (if (file-directory-p (concat tbox-result "/logs"))
-            (setenv "tecsas" tbox-result)
-          ;; assume container
-          (setenv "tecsas" (concat "/tbox:" (tbox-session) ":/tmp"))))))
+  (if (equal (tbox-session) tbox-container-session)
+      (setenv "tecsas" (concat "/tbox-pod:" (get-ncb-pod) "@" (tbox-session) ":/tmp"))
+    (setenv "tecsas" (get-tbox-installation))))
 
 (defvar my-diaspec-imenu-generic-expression
   `(
