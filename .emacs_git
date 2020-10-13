@@ -89,18 +89,26 @@
 
 (defun my-git-diff (&optional diff-name baseline-diff)
   (interactive)
-  (let* ((other-target (replace-regexp-in-string "\\.+$" "" (magit-read-branch-or-commit "Compare with:" "origin/master")))
+  (let* ((other-target (magit-read-branch-or-commit "Compare with:" "origin/master"))
+         (other-target (if baseline-diff 
+                           (replace-regexp-in-string "\\.+$" "" other-target)
+                         other-target))
          (diff-name (if (not diff-name) "git-diff" diff-name))
          (afterdate (if baseline-diff
                         (shell-command-to-string (concat "git log -1 `git merge-base " other-target " HEAD` --format=\"%cd\""))))
          (log-args (if afterdate (append magit-log-arguments (list (concat "--after=\"" afterdate "\""))) magit-log-arguments))
          (diff-target (if baseline-diff
                           (concat other-target "...")
-                        (concat other-target ".."))))
+                        (if (string-match "\\." other-target)
+                            other-target
+                          (concat other-target "..")))))
     (if (get-buffer diff-name)
         (kill-buffer diff-name))
     ;;(magit-log (list (concat baseline "..HEAD")) (append magit-log-arguments  '("--no-merges" "--ancestry-path")))
-    (magit-log (list (concat other-target "..")) log-args)
+    (magit-log (list (if (string-match "\\." other-target) 
+                         other-target 
+                       (concat other-target "..")))
+               log-args)
     (rename-buffer diff-name)
     ;; Avoid buffer beeing re-used for other magit commands
     (setq magit-buffer-locked-p t)

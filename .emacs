@@ -144,6 +144,10 @@
 (global-set-key   "\e\045"            'query-replace-regexp)
 (global-set-key   "\en"               'next-error)
 (global-set-key   "\ep"               'previous-error)
+(global-set-key   "\ep"               'previous-error)
+(global-set-key   [(C-kp-add)]        'text-scale-adjust)
+(global-set-key   [(C-kp-subtract)]   'text-scale-adjust)
+(global-set-key   [(C-kp-zero)]       'text-scale-adjust)
 (global-unset-key "\C-t")
 
 
@@ -393,8 +397,8 @@ On attempt to pass beginning of prompt, stop and signal error."
 (defun my-term-highlight-given-prompt (point-at-term-bol)
   "Highligts the prompt which ends at given point"
   (interactive)
-  (put-text-property (point-at-bol) point-at-term-bol 'font-lock-face '(foreground-color . "cyan"))
-  (put-text-property (- point-at-term-bol 1) (point-at-eol)  'font-lock-face 'default))
+  (add-text-properties (point-at-bol) point-at-term-bol
+                       '(rear-nonsticky t font-lock-face '(foreground-color . "cyan"))))
 
 (defun my-term-highlight-prompt (str)
   "Highligts the prompt(s) if anyone exists in given process output."
@@ -912,6 +916,9 @@ On attempt to pass beginning of prompt, stop and signal error."
 ;   ' build))
 
 ;(define-key overriding-terminal-local-map [backspace] 'my-delete-backward)
+
+(defun make-process-buffer-name (name)
+  (concat "*" name "*"))
 
 ;;; End .emacs
 (if (featurep 'benchmark-init-loaddefs)

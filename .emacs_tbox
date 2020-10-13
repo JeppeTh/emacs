@@ -111,8 +111,22 @@
       (setq start (match-end 1)))
       (setq tbox-pods pods))))
 
+(defun get-pod (regexp)
+  (car (cl-member regexp (get-tbox-pods) :test #'string-match)))
+
 (defun get-ncb-pod ()
-  (car (cl-member "controller" (get-tbox-pods) :test #'string-match)))
+  (get-pod "controller-[0-9]"))
+
+(defun get-yang-pod ()
+  (get-pod "-yang"))
+
+(defun get-pod-ip (pod)
+  (let ((tbox-result (tbox-cmd-to-string (concat "kubectl describe pod " pod " | /usr/bin/grep IP"))))
+    (if (string-match ".*IP: *\\(.+\\)$" tbox-result)
+        (match-string 1 tbox-result))))
+
+(defun get-yang-ip ()
+  (get-pod-ip (get-yang-pod)))
 
 (defvar tbox-pods--history-list nil
   "History list for 'connect-tbox-pod'.")
@@ -166,7 +180,7 @@
     (concat "\"kubectl exec -it " (get-ncb-pod) " " program "\"")))
 
 (defun tbox-make-term (name program &optional is-ncb startfile historyfile &rest switches)
-  (let* ((term-buffer-name (concat "*" name "*"))
+  (let* ((term-buffer-name (make-process-buffer-name name))
          (cmd (if is-ncb
                   (concat "\"ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ncb-ip " " program)
                 (concat "\" " program)))
@@ -174,7 +188,7 @@
                   cmd
                 (dolist (switch switches cmd) (setq cmd (concat cmd  " " switch)))))
          (cmd (concat cmd "\"")))
-    (if (get-buffer-process (get-buffer term-buffer-name))
+    (if (get-process name)
         (switch-to-buffer term-buffer-name)
       (apply 'make-term (append (list name) (make-tbox-cmd-list cmd startfile)))
       (switch-to-buffer term-buffer-name)
@@ -184,7 +198,7 @@
       (local-set-key [(control backspace)] 'my-send-backspace)
       (local-set-key [(control tab)] 'dabbrev-expand)
       (local-set-key [return]        'my-compile-goto-error)
-      ;;(add-function :before (process-filter (get-buffer-process (get-buffer screen_name))) #'(lambda (proc str) (my-tbox-strip-cshrc-echos str)))
+      ;;(add-function :before (process-filter (get-process name)) #'(lambda (proc str) (my-tbox-strip-cshrc-echos str)))
       ;;  (add-function :filter-return (local 'eshell-post-rewrite-command-function)
       ;;                #'eshell--apply-redirections))
       ;;(add-function :override (process-filter process)
@@ -222,10 +236,10 @@
 (defun tbox-screen(host_suffix &optional inputname historyfile is-ncb)
   (interactive "sScreen host suffix: ")
   (let* ((name (if inputname inputname host_suffix))
-         (screen-name (concat "*" name "*"))
+         (screen-name (make-process-buffer-name name))
          (historyfile (if historyfile historyfile "~/.screen_history"))
          )
-    (if (get-buffer-process (get-buffer screen-name))
+    (if (get-process name)
         (switch-to-buffer screen-name)
       (let* (
              (host (concat tbox-host "_" host_suffix))
@@ -263,4 +277,7 @@
 (defun tbox ()
   (interactive)
   (tbox-make-term "tbox" "tcsh" nil nil "~/.tbox_history")
+  ;; tbox can't handle -cmd correctly - i.e. -cmd "sh -c 'export EMACS_SH=t;\tcsh'"
+  ;; doesnt't work
+  (term-send-string (get-buffer-process (current-buffer)) "setenv EMACS_SH t;\\tcsh\n")
   (cd (concat "/tbox:" (tbox-session) ":/")))
