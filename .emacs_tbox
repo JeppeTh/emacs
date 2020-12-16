@@ -241,6 +241,8 @@
          )
     (if (get-process name)
         (switch-to-buffer screen-name)
+      ;; Make sure tbox-session is initialized
+      (tbox-session)
       (let* (
              (host (concat tbox-host "_" host_suffix))
              (screen-cmd  (concat "/local/tecsas/3pp/bin/screen -d -r -S " host " -e^ad")))
@@ -270,7 +272,7 @@
 
 (defun get-tbox-installation()
   (let ((tbox-result (tbox-cmd-to-string "echo $TECSAS_INSTALLATION_ROOT/$GSN_WS_NAME")))
-    (if (string-match ".*\\(^/\\(proj\\|local\\).*\\)$" tbox-result)
+    (if (string-match ".*\\(^/\\(proj\\|local\\|workspace\\).*\\)$" tbox-result)
         (match-string 0 tbox-result)
       nil)))
 

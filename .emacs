@@ -162,7 +162,9 @@
                   (set-keymap-parent my-map (current-local-map))
                   (use-local-map my-map)
                   )
-              ))
+              )
+            (turn-off-auto-fill)
+            )
           1)
 (define-key minibuffer-local-map [(control tab)] 'scroll-other-window)
 
@@ -383,7 +385,9 @@ On attempt to pass beginning of prompt, stop and signal error."
   (setq comint-scroll-to-bottom-on-input `this)
   (setq my-comint-mode t)
   (make-local-variable 'kill-buffer-hook)
-  (add-hook 'kill-buffer-hook 'comint-write-input-ring))
+  (add-hook 'kill-buffer-hook 'comint-write-input-ring)
+  (turn-off-auto-fill)
+  )
 
 (add-hook 'comint-mode-hook 'my-comint-mode-hook t)
 
@@ -451,6 +455,7 @@ On attempt to pass beginning of prompt, stop and signal error."
   (setq my-term-shell-mode t)
   (make-local-variable 'kill-buffer-hook)
   (add-hook 'kill-buffer-hook 'term-write-input-ring)
+  (turn-off-auto-fill)
   )
 
 ;;(add-hook 'term-mode-hook 'my-term-shell-mode-hook t)

@@ -698,6 +698,7 @@ region if it is active."
                               "/home/ervjest/Tags/TTX"
                               "/home/ervjest/Tags/OMS"
                               "/home/ervjest/Tags/NPS"
+                              "/home/ervjest/Tags/3PP"
                               )))
 
 ;; Xrefactory configuration part ;;
