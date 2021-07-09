@@ -6,14 +6,19 @@
 (defun init-tbox-parameters ()
   (interactive)
   (message "Init TBOX parameters.")
-  (let* ((session (determine-session)))
+  (let* ((old-tbox (concat (or tbox-session "") (or tbox-host "")))
+         (session (determine-session)))
     ;; "<Session> (<host>)"
     (setq tbox-session (my-string-match "^\\([0-9]+\\)" session 1))
-    (setq tbox-host (my-string-match "^[0-9]+ (\\([^)]+\\)" session 1)))
-  (message "Checking if container.")
-  (if (not (string-match "Command not found" (tbox-cmd-to-string "which kubectl")))
-      (setq tbox-container-session tbox-session))
-  (message nil))
+    (setq tbox-host (my-string-match "^[0-9]+ (\\([^)]+\\)" session 1))
+    (setq tbox-container-session nil)
+    (message "Checking if container.")
+    (if (not (string-match "Command not found" (tbox-cmd-to-string "which kubectl")))
+        (setq tbox-container-session tbox-session))
+    (message nil)
+    (if (not (eq (concat tbox-session tbox-host) old-tbox))
+        (fix-tecsas-env)))
+)
 
 (defun tbox-session ()
   (if (not tbox-session)
@@ -23,8 +28,10 @@
 (defun session-data-to-string (session-data)
   (let* ((session (my-string-match "TBOX_SESSION=\\([0-9]+\\)" session-data 1))
          (host    (my-string-match "TBOX_HOST=\\(.+\\)$" session-data 1))
-         (instance (my-string-match "TBOX_INSTANCE=\\([0-9]+\\)" session-data 1)))
-    (concat session " ("(concat host "-tb" instance) ")")))
+         (instance (my-string-match "TBOX_INSTANCE=\\([0-9]+\\)" session-data 1))
+         (this_tbox_host (replace-regexp-in-string "^\\([^.]+\\)\\(.+\\)?$" (concat "\\1-tb" instance) host))
+         )
+    (concat session " (" this_tbox_host ")")))
 
 (defun determine-session ()
   (interactive)
@@ -122,7 +129,7 @@
 
 (defun get-pod-ip (pod)
   (let ((tbox-result (tbox-cmd-to-string (concat "kubectl describe pod " pod " | /usr/bin/grep IP"))))
-    (if (string-match ".*IP: *\\(.+\\)$" tbox-result)
+    (if (string-match "^IP: *\\(.+\\)$" tbox-result)
         (match-string 1 tbox-result))))
 
 (defun get-yang-ip ()
@@ -276,10 +283,13 @@
         (match-string 0 tbox-result)
       nil)))
 
+(defun tbox-dir ()
+  (concat "/tbox:" (tbox-session) ":/"))
+
 (defun tbox ()
   (interactive)
   (tbox-make-term "tbox" "tcsh" nil nil "~/.tbox_history")
   ;; tbox can't handle -cmd correctly - i.e. -cmd "sh -c 'export EMACS_SH=t;\tcsh'"
   ;; doesnt't work
   (term-send-string (get-buffer-process (current-buffer)) "setenv EMACS_SH t;\\tcsh\n")
-  (cd (concat "/tbox:" (tbox-session) ":/")))
+  (cd (tbox-dir)))

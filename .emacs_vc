@@ -22,7 +22,10 @@
   (interactive)
   (if (and (not (featurep 'mygit)) vc-mode)
       (progn
-        (load-my-git)
+        (condition-case err
+            (load-my-git)
+          (error
+           (message "Failed to load git:%s" err)))
         (load ".emacs_git")
         (revert-buffer nil t)
         )
@@ -30,7 +33,7 @@
   )
 (add-hook 'find-file-hooks 'my-autoload-git t)
 
-(defun load-my-git () 
+(defun load-my-git ()
   (interactive)
   (let* ((git-path (shell-command-to-string "which \\git"))
          (git-alias (shell-command-to-string "which git"))
@@ -45,7 +48,7 @@
          (git-root-dir (if (string-match "[^/]*\\(.+\\)/\\(bin\\|libexec/git-core\\)/git" git-bin-dir)
                            (match-string 1 git-bin-dir)
                          "")))
-   
+
     (if (and (not (eq git-bin-dir "")) git-root-dir)
         (progn
           (add-to-list 'load-path (concat git-root-dir "/contrib/emacs"))
@@ -101,6 +104,7 @@
 (global-set-key "\C-d"     'my-vc-ediff-pred-current-buffer)
 (global-set-key "\e\C-d"   'my-vc-ediff-other-current-buffer)
 (global-set-key "\C-o"     'my-vc-checkout-curr)
+(global-set-key "\C-xu"     'my-vc-uncheckout-curr)
 (define-key esc-map "\C-x\C-f" 'my-vc-find-other-version)
 (define-key esc-map "\C-x\C-v" 'my-vc-find-alternate-version)
 (defun my-dired-mode-hook () (local-set-key "\C-o" 'checkout-curr))

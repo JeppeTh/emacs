@@ -78,8 +78,8 @@
                    (frameset-to-register ?e))
                )))
 
-(add-hook 'ediff-prepare-buffer-hook 
-          '(lambda() 
+(add-hook 'ediff-prepare-buffer-hook
+          '(lambda()
              (my-git-fix-messed-up-modtime)
              ;; Check if buffer needs revert,
              (if (not (verify-visited-file-modtime (current-buffer)))
@@ -111,7 +111,7 @@ determine the target buffer."
          (org-return-cmd (progn (pop-to-buffer ediff-buffer) (key-binding [return] t)))
          (org-c-return-cmd (key-binding [C-return] t))
          (org-del-cmd (key-binding [delete] t))
-         (org-quit-cmd (key-binding [return] t))
+         (org-quit-cmd (key-binding [(control g)] t))
          )
     (local-set-key [return] (lambda() (interactive) (ipa-insert) (exit-recursive-edit)))
     (local-set-key [C-return] (lambda() (interactive) (ipa-edit) (exit-recursive-edit)))
@@ -167,6 +167,7 @@ determine the target buffer."
   (define-key ediff-mode-map "inb" 'my-ediff-ipa-next)
   (define-key ediff-mode-map "inc" 'my-ediff-ipa-next)
   (local-set-key "\C-r" 'ediff-revert-buffers-then-recompute-diffs)
+  (ediff-update-diffs)
   ;;(let ((top-pos  (- (frame-parameter nil `top) 22)))
   ;;  (ediff-toggle-wide-display)
   ;;  (set-frame-position (selected-frame) (- (frame-parameter nil `left) 3) top-pos)
@@ -678,6 +679,7 @@ region if it is active."
                               "/home/ervjest/Tags/MSS"
                               "/home/ervjest/Tags/SSS"
                               "/home/ervjest/Tags/XPS"
+                              "/home/ervjest/Tags/NSS"
                               "/home/ervjest/Tags/MPS"
                               "/home/ervjest/Tags/MTS"
                               "/home/ervjest/Tags/UPS"

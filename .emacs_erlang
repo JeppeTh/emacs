@@ -87,6 +87,16 @@ containing a tab or beginning with a '('."
 (defun my-ring-ref (ring index)
   (and (> (ring-length ring) 0) (ring-ref ring index)))
 
+(defun my-kill-input ()
+  (if my-term-shell-mode
+      (term-kill-input)
+    (comint-kill-input)))
+
+(defun my-send-input ()
+  (if my-term-shell-mode
+      (term-send-input)
+    (comint-send-input)))
+
 (defun my-send-tab ()
   "Sends a tab to the shell to get completions on input"
   (interactive)
@@ -99,9 +109,7 @@ containing a tab or beginning with a '('."
           (setq-local term-input-sender (function my-simple-send))
           (setq-local comint-input-sender (function my-simple-send))
           (insert "	")
-          (if my-term-shell-mode
-              (term-send-input)
-            (comint-send-input))
+          (my-send-input)
           (run-at-time 0.1 nil 'my-strip-completion-tab)
           (if (not (eq last-history (my-ring-ref used-ring 0)))
               (ring-remove used-ring 0))
@@ -145,9 +153,7 @@ for completion since a backspace then must also be sent to the shell."
          (last-history (my-ring-ref used-ring 0))
          )
     (end-of-line)
-    (if my-term-shell-mode
-        (term-send-input)
-      (comint-send-input))
+    (my-send-input)
     ;; If beginning of cmd is completed by shell, only the typed arguments
     ;; will be stored in the history. Replace this entry with the complete
     ;; command in that case.
@@ -692,10 +698,9 @@ editing control characters:
   (interactive)
   (gtt)
   (goto-char (point-max))
+  (my-kill-input)
   (insert (concat "l(" suite "),f(MyGttRef),{MyGttRef, _} = " cmd))
-  (if my-term-shell-mode
-      (term-send-input)
-    (comint-send-input))
+  (my-send-input)
   (goto-char (point-max))
   )
 
@@ -704,9 +709,7 @@ editing control characters:
   (interactive)
   (goto-char (point-max))
   (insert "gtt_execute:stop(MyGttRef).")
-  (if my-term-shell-mode
-      (term-send-input)
-    (comint-send-input))
+  (my-send-input)
   (goto-char (point-max))
   )
 
@@ -835,8 +838,9 @@ editing control characters:
   (use-local-map my-term-keymap)
   (local-set-key "\C-xr" 'gtt)
   (local-set-key "\C-xq" 'my-gtt-stop-test-case)
-  ;; Or should we cd to tbox instead?
-  (cd (tecsas-dir))
+  (if (equal (tbox-session) tbox-container-session)
+      (cd (concat (tbox-dir) "tmp/DPE_COMMONLOG/"))
+    (cd (tecsas-dir)))
 )
 
 (defadvice term-handle-exit

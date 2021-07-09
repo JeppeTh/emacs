@@ -16,6 +16,10 @@
           (add-to-list 'Info-directory-list
                        "~/.emacs.d/site-lisp/magit/Documentation/"))
 
+        ;; Uncertain if this is needed, but at some points commit editor etc ended up in wrong emacs(-server).
+        (if (is-unix)
+            (setq server-name (format "server%s" (emacs-pid))))
+
         (magit-auto-revert-mode -1)
         (setq magit-log-arguments  (append magit-log-arguments (list "--no-merges") (list "--follow")))
         (set-face-foreground 'magit-blame-heading "lightgrey")
