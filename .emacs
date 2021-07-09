@@ -577,8 +577,8 @@ On attempt to pass beginning of prompt, stop and signal error."
 ;; Windows stuff
 (make-variable-buffer-local 'make-backup-files)
 (defun my-ignore-backups ()
-  (if (or (string-match "d:\\\\My Documents\\\\GitHub" buffer-file-name)
-          (string-match "c:\\\\Users\\\\Owner\\\\Desktop" buffer-file-name)
+  (if (or (string-match "d:/My Documents/GitHub" buffer-file-name)
+          (string-match "c:/Users/Owner/Desktop" buffer-file-name)
           )
       (setq make-backup-files nil)))
 (add-hook 'find-file-hooks 'my-ignore-backups)
