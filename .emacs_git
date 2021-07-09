@@ -27,9 +27,12 @@
         ;;(setq magit-process-extreme-logging t)
         ;;(magit-toggle-git-debug)
 
-        ;; Uncertain if this is needed, but at some points commit editor etc ended up in wrong emacs(-server).
         (if (is-unix)
-            (setq server-name (format "server%s" (emacs-pid))))
+            ;; Uncertain if this is needed, but at some points commit editor etc
+            ;; ended up in wrong emacs(-server).
+            (setq server-name (format "server%s" (emacs-pid)))
+          (setenv "SSH_ASKPASS" "git-gui--askpass")
+          (load "ssh-agency" t))
 
         ;; Seems magit-ediff-resolve has been renamed to magit-ediff-resolve-rest
         (if (not (functionp 'magit-ediff-resolve-rest))
