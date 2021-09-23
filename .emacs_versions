@@ -1,5 +1,25 @@
 ;; Some version related issues
 
+(if (not (functionp 'turn-off-auto-fill))
+    (progn
+      (defun turn-on-auto-fill ()
+        "Unconditionally turn on Auto Fill mode."
+        (auto-fill-mode 1))
+
+      (defun turn-off-auto-fill ()
+        "Unconditionally turn off Auto Fill mode."
+        (auto-fill-mode -1))
+      ))
+
+(if (not (functionp 'completion-at-point))
+    (defalias 'completion-at-point 'comint-dynamic-complete))
+
+(require 'compile)
+(defun my-compilation-start (COMMAND ERROR-MESSAGE NAME-FUNCTION &optional MODE)
+  (if (functionp 'compilation-start)
+      (compilation-start COMMAND MODE NAME-FUNCTION)
+    (compile-internal COMMAND ERROR-MESSAGE MODE nil nil NAME-FUNCTION)))
+
 (if (< emacs-major-version 24)
     (progn
       ;;;; which-function-mode  has been renamed
@@ -22,7 +42,7 @@
     (progn
       ;; Complete filenames in e.g. Shell Mode Command. Fix futher down doesn't
       ;; seem  to work for < 22
-      (define-key minibuffer-local-map [tab] 'comint-dynamic-complete)
+      (define-key minibuffer-local-map [tab] 'completion-at-point)
       ;; process-kill-without-query has been renamed
       (defalias 'set-process-query-on-exit-flag 'process-kill-without-query)
       (defalias 'with-no-warnings 'progn)
@@ -50,10 +70,11 @@
       (defvar directory-sep-char 92 "Parameter removed in emacs 24")
       ;; Added for magit...
       (require 'package)
-      (add-to-list 'package-archives
-                   '("marmalade" . "https://marmalade-repo.org/packages/"))
-      (add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/"))
-      (add-to-list 'package-archives '("melpa" . "http://melpa.org/packages/"))
+
+      ;;(add-to-list 'package-archives
+      ;;             '("marmalade" . "https://marmalade-repo.org/packages/"))
+      ;;(add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/"))
+      (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/"))
       ;; The original ELPA archive still has some useful
       ;; stuff.
       ;; (add-to-list 'package-archives<br />
@@ -62,9 +83,3 @@
       (if (and (= emacs-major-version 24) (< emacs-minor-version 4))
           (defalias 'frameset-to-register 'frame-configuration-to-register))
       ))
-
-(require 'compile)
-(defun my-compilation-start (COMMAND ERROR-MESSAGE NAME-FUNCTION)
-  (if (< emacs-major-version 22)
-      (compile-internal COMMAND ERROR-MESSAGE nil nil nil NAME-FUNCTION)
-    (compilation-start COMMAND nil NAME-FUNCTION)))

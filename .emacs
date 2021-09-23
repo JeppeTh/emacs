@@ -5,6 +5,8 @@
 (setq load-path (append load-path (list "~/emacs")))
 (setq load-path (append load-path (list (getenv "HOME"))))
 
+(require 'dired)
+
 ;; Requires > 24.3
 (if (or (and (= emacs-major-version 24)
 	     (>= emacs-minor-version 3))
@@ -153,12 +155,12 @@
 
 ;; My hooks
 
-;; Fix so tab defaults to 'comint-dynamic-complete in minibuffer.
+;; Fix so tab defaults to 'completion-at-point in minibuffer.
 (add-hook 'minibuffer-setup-hook
           (lambda ()
             (if (eq 'self-insert-command (lookup-key (current-local-map) "	"))
                 (let ((my-map (make-keymap "my-minibuffer-map")))
-                  (define-key my-map [tab] 'comint-dynamic-complete)
+                  (define-key my-map [tab] 'completion-at-point)
                   (set-keymap-parent my-map (current-local-map))
                   (use-local-map my-map)
                   )
@@ -254,7 +256,7 @@ Copied from `sh-imenu-generic-expression', which seemed faulty.")
   (setq compilation-scroll-output t)
 
   (local-set-key "\C-g"          'my-stop-process)
-  (local-set-key [tab]           'comint-dynamic-complete)
+  (local-set-key [tab]           'completion-at-point)
   (local-set-key [(control tab)] 'scroll-other-window))
 
 (add-hook 'compilation-mode-hook 'my-compilation-mode-hook t)
@@ -377,7 +379,7 @@ On attempt to pass beginning of prompt, stop and signal error."
   (local-set-key [left]                'my-comint-backward-char)
   (local-set-key [backspace]           'my-comint-delete-backward-char)
   (local-set-key [(control backspace)] 'delete-backward-char)
-  (local-set-key [tab]                 'comint-dynamic-complete)
+  (local-set-key [tab]                 'completion-at-point)
   (local-set-key [(control tab)]       'scroll-other-window)
 
   (setq comint-input-ignoredups   t)
@@ -531,6 +533,10 @@ On attempt to pass beginning of prompt, stop and signal error."
                       (get-buffer-process (current-buffer))
                       nil)))
 
+;; Strip things in grep results
+(add-hook 'grep-mode-hook
+          (lambda () (local-set-key "k" 'kill-all-matching-lines)))
+
 ;; Windows stuff
 (defun my-strip-strlm ()
   (goto-char (point-min))
@@ -625,6 +631,14 @@ On attempt to pass beginning of prompt, stop and signal error."
   (save-excursion
     (beginning-of-line)
     (kill-line nil)))
+
+(defun kill-all-matching-lines (what)
+  "Kill all lines in buffer matching input."
+  (interactive (list (read-shell-command "Kill what: ")))
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward (concat "^.*" what ".*\n") nil t)
+      (replace-match ""))))
 
 ;; Host specific section
 ;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -753,7 +767,9 @@ On attempt to pass beginning of prompt, stop and signal error."
                 ("\\.erl\\>"      . erlang-mode)
                 ("\\.hrl\\>"      . erlang-mode)
                 ("\\.asn\\>"      . snmp-mode)
-                ("\\.diaSpec\\>"  . diaspec-mode))
+                ("\\.diaSpec\\>"  . diaspec-mode)
+                ("\\.\\(dialyzer\\|plt\\).log\\>" . compilation-mode)
+                )
             auto-mode-alist
             ))
 

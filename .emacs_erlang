@@ -197,7 +197,7 @@ permanently the indentation in Erlang mode would be incorrect."
       default-tag)))
 
 (defun my-erlang-find-tag-no-apo ()
-  "Find default tag without apostrophs"
+  "Find default tag without apostrophes"
   (interactive)
   (let* ((tag_with_apo (my-erlang-find-tag-default))
          (ignore (string-match "[^']+" tag_with_apo))
@@ -233,15 +233,6 @@ permanently the indentation in Erlang mode would be incorrect."
     )
   "Imenu generic expression for Erlang Man mode.  See `imenu-generic-expression'.")
 
-(add-hook 'Man-mode-hook 
-          (lambda () 
-            ;;(if saved-erlang-man-function-name
-            ;;    (Man-notify-when-ready (current-buffer)))
-            (setq imenu-generic-expression my-erlang-man-imenu-generic-expression)
-            (setq my-imenu-next-regexp '(concat (my-which-function) "[ 	]*("))
-            )
-          )
-
 ;;(add-hook 'Man-cooked-hook 
 ;;          (lambda () 
 ;;            (if saved-erlang-man-function-name
@@ -254,6 +245,19 @@ permanently the indentation in Erlang mode would be incorrect."
       ;; erlang-get-function-under-point doesn't really seam to work in man mode.
       (erlang-man-function (nth 1 (erlang-get-function-under-point)))
     (erlang-man-module (thing-at-point 'symbol))))
+
+(defun my-erlang-man-mode-hook ()
+  (if (and (equal mode-name "Man") erlang-man-function-name)
+      (progn
+        ;;(if saved-erlang-man-function-name
+        ;;    (Man-notify-when-ready (current-buffer)))
+        (setq imenu--index-alist nil) ;; Seems this is needed in Emacs 26
+        (setq imenu-generic-expression my-erlang-man-imenu-generic-expression)
+        (setq my-imenu-next-regexp '(concat (my-which-function) "[ 	]*("))
+
+        (local-set-key "m"      'erlang-man-function)
+        (local-set-key [return] 'my-erlang-man-follow)
+        )))
 
 (defvar saved-erlang-man-function-name nil)
 
@@ -273,13 +277,10 @@ permanently the indentation in Erlang mode would be incorrect."
                 (Man-mode)
                 (setq erlang-man-function-name saved-erlang-man-function-name)
                 (setq saved-erlang-man-function-name nil))))))
-  (if (and (equal mode-name "Man") erlang-man-function-name)
-      (progn
-        (local-set-key "m"      'erlang-man-function)
-        (local-set-key [return] 'my-erlang-man-follow)
-        )))
-(ad-activate 'Man-notify-when-ready)
+  (my-erlang-man-mode-hook))
 
+(if (string-lessp erlang-version "2.8.4")
+    (ad-activate 'Man-notify-when-ready))
 
 (defadvice Man-bgproc-sentinel
   (after my-notify-man-ready (PROCESS MSG) disable)
@@ -293,14 +294,16 @@ permanently the indentation in Erlang mode would be incorrect."
 
 (defadvice erlang-man-find-function
   (after my-erlang-find-function (BUF FUNC &optional MODULE-NAME))
-  "Fix so that also Mod:Fun is found by `erlang-man-find-function'"
+  "Fix so that also Mod:Fun is found by `erlang-man-find-function'
+   Also trigger for  `my-erlang-man-mode-hook'"
   (if erlang-man-function-name
-      (if (eq (point) (point-min))
-          (if (re-search-forward (concat "^[ \t]+[[:lower:]_0-9]+:" erlang-man-function-name " *(") nil t)
-              (recenter))
-        (recenter)
-        (setq erlang-man-function-name nil)))
-  )
+      (progn
+        (my-erlang-man-mode-hook)
+        (if (eq (point) (point-min))
+            (if (re-search-forward (concat "^[ \t]+[[:lower:]_0-9]+:" erlang-man-function-name " *(") nil t)
+                (recenter))
+          (recenter)
+          (setq erlang-man-function-name nil)))))
 
 (ad-activate 'erlang-man-find-function)
 
@@ -339,7 +342,10 @@ permanently the indentation in Erlang mode would be incorrect."
   (setq comint-prompt-regexp             "^[^<>=,]*> ?") ; only one space
   (setq comint-input-filter              'my-erlang-input-filter)
   (setq comint-scroll-to-bottom-on-output nil)
+  ; Do we need to set both?
   (add-hook 'comint-dynamic-complete-functions 'my-erlang-send-tab t t)
+  (if (boundp 'completion-at-point-functions)
+      (add-hook 'completion-at-point-functions 'my-erlang-send-tab t t))
   (add-hook 'comint-output-filter-functions 'inferior-erlang-strip-ctrl-g t t)
   ; Make it possible to run several Erlang-shells
   (make-local-variable     'inferior-erlang-process)
@@ -735,7 +741,7 @@ editing control characters:
   (perform-replace "[" "[" nil nil nil)
   (goto-char (point-min))
   (perform-replace "]" "]" nil nil nil)
-  (mark-whole-buffer)
+  (call-interactively 'mark-whole-buffer)
   (call-interactively 'indent-region))
 
 (defun gtt-make-async ()
@@ -778,6 +784,9 @@ editing control characters:
       ;; Don't complete filename
       (setq-local comint-dynamic-complete-functions
             (append (list 'comint-replace-by-expanded-history 'my-erlang-send-tab)))
+      (if (boundp 'completion-at-point-functions)
+          (setq-local completion-at-point-functions
+                      (append (list 'comint-replace-by-expanded-history 'my-erlang-send-tab))))
       (make-local-variable     'find-tag-default-function)
       (setq-local find-tag-default-function 'my-erlang-find-tag-default)
       (setq-local comint-process-echoes t))))
@@ -838,7 +847,7 @@ editing control characters:
   (use-local-map my-term-keymap)
   (local-set-key "\C-xr" 'gtt)
   (local-set-key "\C-xq" 'my-gtt-stop-test-case)
-  (if (equal (tbox-session) tbox-container-session)
+  (if (or (equal (tbox-session) tbox-container-session) (not (file-readable-p (tecsas-dir))))
       (cd (concat (tbox-dir) "tmp/DPE_COMMONLOG/"))
     (cd (tecsas-dir)))
 )
@@ -897,6 +906,7 @@ editing control characters:
       (comint-read-input-ring)
       (setq-local comint-process-echoes t))))
 
+;; Needs special deployment....
 (defun yang ()
   (interactive)
   (let* ((name "yang")
@@ -906,8 +916,8 @@ editing control characters:
       (if (get-buffer yang-buffer-name)
           (kill-buffer yang-buffer-name))
       (let ((yang-ip (get-yang-ip)))
-
-      (tbox-make-term name (concat "ssh -l epg_cm " yang-ip " -p 2222") nil nil "~/.yang_history")
+      ;; Check ts_425 for users
+      (tbox-make-term name (concat "ssh -l user6 " yang-ip " -p 2222") nil nil "~/.yang_history")
       (setq-local term-prompt-regexp "^\\([^@]+@[^#]+#\\)")
 
       (while (not (string-match "\\([Pp]assword:\\|fingerprint\\)" (buffer-string)))
@@ -918,7 +928,7 @@ editing control characters:
 
       (while (not (string-match "[Pp]assword:" (buffer-string)))
         (sleep-for 0 500))
-      (term-send-string (get-buffer-process (current-buffer)) "epg_cm\n")
+      (term-send-string (get-buffer-process (current-buffer)) "user6_pw\n")
       ))))
 
 (defun gl ()
@@ -974,7 +984,7 @@ editing control characters:
   (setq mode-name "diaSpec")
 
   (setq diaspec-syntax-table (make-syntax-table (syntax-table)))
-  (modify-syntax-entry ?; "<" diaspec-syntax-table)
+  (modify-syntax-entry ?\; "<" diaspec-syntax-table)
   (modify-syntax-entry ?\n ">" diaspec-syntax-table)
   (set-syntax-table diaspec-syntax-table)
 

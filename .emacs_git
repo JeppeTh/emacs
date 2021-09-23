@@ -2,7 +2,12 @@
 (add-hook 'find-file-hooks 'my-git-file-status t)
 (add-hook 'dired-after-readin-hook 'my-git-title t)
 
-(add-to-list 'load-path "~/.emacs.d/site-lisp/magit/lisp")
+(defun my-set-default-magit-log-arguments (extra)
+  (if (boundp 'magit-log-arguments)
+      (setq magit-log-arguments (append magit-log-arguments extra))
+    (let ((default-args (get 'magit-log-mode 'magit-log-default-arguments)))
+      (put 'magit-log-mode 'magit-log-default-arguments (append default-args extra))
+      (put 'magit-log-select-mode 'magit-log-default-arguments (append default-args extra)))))
 
 (provide 'mygit)
 
@@ -21,7 +26,7 @@
             (setq server-name (format "server%s" (emacs-pid))))
 
         (magit-auto-revert-mode -1)
-        (setq magit-log-arguments  (append magit-log-arguments (list "--no-merges") (list "--follow")))
+        (my-set-default-magit-log-arguments (list "--no-merges" "--follow"))
         (set-face-foreground 'magit-blame-heading "lightgrey")
         (add-hook 'magit-ediff-quit-hook  'my-ediff-quit t)
         (remove-hook 'magit-ediff-quit-hook 'magit-ediff-restore-previous-winconf)
@@ -29,13 +34,15 @@
         (add-hook 'magit-find-file-hook 'ipa-load-annotations-into-buffer t)
         (add-hook 'magit-status-mode-hook 'my-magit-status-mode-hook)
         (add-hook 'magit-log-mode-hook 'my-magit-log-mode-hook)
-        (add-hook 'magit-revision-sections-hook (lambda (TAG) 
-                                                  (interactive) 
+        (add-hook 'magit-revision-sections-hook (lambda (&optional TAG)
+                                                  (interactive)
                                                   (local-set-key [(control tab)] 'magit-section-cycle-diffs)
                                                   (local-set-key [(control return)] 'my-git-show-commit-at-point)
                                                   (local-set-key "\C-c " 'my-git-show-child-commit)
                                                   ))
         (global-set-key "\C-xvs" 'magit-status)
+        (if (functionp 'magit-status-quick)
+            (global-set-key "\C-xvs" 'magit-status-quick))
         (global-set-key "\C-xv?" 'magit-log-buffer-file)
         (define-key magit-blame-mode-map "e"      'my-git-blame-ediff)
         (define-key magit-blame-mode-map "b"      'magit-blame)
@@ -67,6 +74,12 @@
     ;;      (revert-buffer)))
     (magit-ediff-show-working-tree file-at-point)))
 
+(defun my-magit-log (revs args)
+  "Wrapper of magit log function which differs depending on magit versions."
+  (if (functionp 'magit-log-other)
+      (switch-to-buffer (magit-log-other revs args))
+    (magit-log revs args)))
+
 (defun my-magit-status-mode-hook ()
   (interactive)
   (local-set-key  "e"      'my-git-ediff-pred-at-point)
@@ -86,6 +99,12 @@
                      (my-git-get-filename-for-rev (magit-current-file) commit))))
 
 ;; Misc functions...
+(defun my-get-magit-log-arguments ()
+  "Log args are stored differently in different magit versions."
+  (if (boundp 'magit-log-arguments)
+      magit-log-arguments
+    (get 'magit-log-mode 'magit-log-default-arguments)))
+
 (defvar my-git-diff-target nil "Diff target in \"git-diff buffers\"")
 (defun my-git-list-changed-files ()
   (interactive)
@@ -100,7 +119,7 @@
          (diff-name (if (not diff-name) "git-diff" diff-name))
          (afterdate (if baseline-diff
                         (shell-command-to-string (concat "git log -1 `git merge-base " other-target " HEAD` --format=\"%cd\""))))
-         (log-args (if afterdate (append magit-log-arguments (list (concat "--after=\"" afterdate "\""))) magit-log-arguments))
+         (log-args (if afterdate (append (my-get-magit-log-arguments) (list (concat "--after=\"" afterdate "\""))) (my-get-magit-log-arguments)))
          (diff-target (if baseline-diff
                           (concat other-target "...")
                         (if (string-match "\\." other-target)
@@ -109,10 +128,10 @@
     (if (get-buffer diff-name)
         (kill-buffer diff-name))
     ;;(magit-log (list (concat baseline "..HEAD")) (append magit-log-arguments  '("--no-merges" "--ancestry-path")))
-    (magit-log (list (if (string-match "\\." other-target) 
-                         other-target 
-                       (concat other-target "..")))
-               log-args)
+    (my-magit-log (list (if (string-match "\\." other-target)
+                            other-target
+                          (concat other-target "..")))
+                  log-args)
     (rename-buffer diff-name)
     ;; Avoid buffer beeing re-used for other magit commands
     (setq magit-buffer-locked-p t)
@@ -159,17 +178,16 @@
   (let ((my-buffer-name (my-get-buffer-file-name)))
     (or
      (is-git-reference)
-     (and my-buffer-name 
+     (and my-buffer-name
           (not (eq (vc-working-revision my-buffer-name) nil)))
    )))
-  
 
 (defun my-git-title ()
-  (let* ((my-buffer-name (my-get-buffer-file-name))
-         (ver-string (if (is-git-reference)
+  (let* ((ver-string (if (is-git-reference)
                          magit-buffer-refname
-                       (if my-buffer-name
-                           (vc-working-revision my-buffer-name)
+                       (if (my-is-in-git)
+                           (or (magit-get-current-branch)
+                               (vc-working-revision (my-get-buffer-file-name)))
                          nil))))
     (cond (ver-string
            (setq frame-title-format ver-string)
@@ -273,31 +291,42 @@
 (defun my-git-blame-ediff ()
   "Ediff current-buffer against current \"blame\"."
   (interactive)
-  (let* ((this-version (magit-blame-chunk-get :hash))
-         (other-version (magit-blame-chunk-get :previous-hash))
+  (let* ((this-version (my-git-blame-get-commit))
+         (other-version (my-git-blame-get-prior-commmit))
          )
     (my-git-ediff-other-version other-version this-version)))
 
 (defun my-git-blame-open-version ()
   "Open \"blame\" version of current-buffer."
   (interactive)
-  (my-git-blame-open :hash))
+  (my-git-blame-open (my-git-blame-get-commit)))
 
-(defun my-git-blame-open (hash)
+(defun my-git-blame-open (rev)
   "Open \"blame\" version of current-buffer."
   (interactive)
-  (let ((linenum (1+ (count-lines 1 (point-at-bol))))
-        (rev (magit-blame-chunk-get hash)))
-    (if (not rev)
-        (error "No such version"))
+  (if (not rev)
+      (error "No such version"))
+  (let ((linenum (1+ (count-lines 1 (point-at-bol)))))
     (my-git-find-other-version rev)
     (goto-char (point-min)) (forward-line (1- linenum))
     (recenter-top-bottom)))
 
+(defun my-git-blame-get-commit ()
+  "Wrapper needed since functions differ in different magit versions."
+  (if (functionp 'magit-blame-chunk-get)
+      (magit-blame-chunk-get :hash)
+    (oref (magit-current-blame-chunk) orig-rev)))
+
+(defun my-git-blame-get-prior-commmit ()
+  "Wrapper needed since functions differ in different magit versions."
+  (if (functionp 'magit-blame-chunk-get)
+      (magit-blame-chunk-get :previous-hash)
+    (oref (magit-current-blame-chunk) prev-rev)))
+
 (defun my-git-blame-open-prior-version ()
   "Open \"blame\" prior version of current-buffer."
   (interactive)
-  (my-git-blame-open :previous-hash))
+  (my-git-blame-open (my-git-blame-get-prior-commmit)))
 
 (defun my-git-ediff-pred-current-buffer ()
   (interactive)
@@ -376,23 +405,23 @@
         (equal (nth 5 (file-attributes buffer-file-name))
                (nconc (butlast (visited-file-modtime)) (list 0)))))
 
-(defun my-ask-user-about-supersession-threat (orig-fun &rest args)
+(defadvice ask-user-about-supersession-threat
+  (around my-ask-user-about-supersession-threat (orig-fun &rest args))
   "Advice function to handle that backup system messes up mtime"
   (if (not (my-git-fix-messed-up-modtime))
       (apply orig-fun args)))
-
-(advice-add 'ask-user-about-supersession-threat :around #'my-ask-user-about-supersession-threat)
+(ad-activate 'ask-user-about-supersession-threat)
 
 (defun git-grep (what)
     "Run git grep on WHAT in current repo."
     (interactive)
     (let ((top-dir (magit-toplevel)))
-      (my-compilation-start (concat "git grep --full-name -ni " what " " top-dir) 
+      (my-compilation-start (concat "git grep --full-name -ni \"" what "\" " top-dir) 
                             nil
-                            (lambda (n) "*git-grep*"))
+                            (lambda (n) "*git-grep*")
+                            'grep-mode)
       (if (not (string-equal "*git-grep*" (buffer-name)))
           (switch-to-buffer-other-window "*git-grep*"))
       (cd top-dir)
-      ;;(grep-mode)
       )
 )

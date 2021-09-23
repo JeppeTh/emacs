@@ -20,7 +20,7 @@
 (delete-selection-mode 1)
 
 ;; Find-file with wildcard
-(if (< emacs-major-version 24)
+(if (functionp 'partial-completion-mode)
     (partial-completion-mode 1)
   (defvar partial-completion-mode nil))
 
@@ -116,12 +116,15 @@ determine the target buffer."
     (local-set-key [return] (lambda() (interactive) (ipa-insert) (exit-recursive-edit)))
     (local-set-key [C-return] (lambda() (interactive) (ipa-edit) (exit-recursive-edit)))
     (local-set-key [delete] (lambda() (interactive) (ipa-remove) (exit-recursive-edit)))
-    (local-set-key "\C-g" 'exit-recursive-edit)
+    (local-set-key "\C-g" (lambda()
+                            (interactive)
+                            (local-set-key [return] org-return-cmd)
+                            (local-set-key [C-return] org-c-return-cmd)
+                            (local-set-key [delete] org-del-cmd)
+                            (local-set-key "\C-g" org-quit-cmd)
+                            (exit-recursive-edit)
+                            ))
     (recursive-edit)
-    (local-set-key [return] org-return-cmd)
-    (local-set-key [C-return] org-c-return-cmd)
-    (local-set-key [delete] org-del-cmd)
-    (local-set-key "\C-g" org-quit-cmd)
     (pop-to-buffer org-buffer)))
 
 (defun my-ediff-ipa-previous  (arg &optional key)
@@ -157,6 +160,9 @@ determine the target buffer."
   (if (eq ediff-split-window-function 'split-window-vertically)
       (ediff-toggle-split))
   (define-key ediff-mode-map "i"  nil)
+  (define-key ediff-mode-map "ea" 'my-ediff-edit-buffer)
+  (define-key ediff-mode-map "eb" 'my-ediff-edit-buffer)
+  (define-key ediff-mode-map "ec" 'my-ediff-edit-buffer)
   (define-key ediff-mode-map "ia" 'my-ediff-ipa-insert)
   (define-key ediff-mode-map "ib" 'my-ediff-ipa-insert)
   (define-key ediff-mode-map "ic" 'my-ediff-ipa-insert)
@@ -167,7 +173,10 @@ determine the target buffer."
   (define-key ediff-mode-map "inb" 'my-ediff-ipa-next)
   (define-key ediff-mode-map "inc" 'my-ediff-ipa-next)
   (local-set-key "\C-r" 'ediff-revert-buffers-then-recompute-diffs)
-  (ediff-update-diffs)
+  ;: Seems updaing diffs breaks resolve in Emacs 26
+  (if (not (eq ediff-job-name 'ediff-merge-buffers))
+      (ediff-update-diffs))
+
   ;;(let ((top-pos  (- (frame-parameter nil `top) 22)))
   ;;  (ediff-toggle-wide-display)
   ;;  (set-frame-position (selected-frame) (- (frame-parameter nil `left) 3) top-pos)

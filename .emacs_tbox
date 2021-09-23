@@ -64,7 +64,7 @@
                  ("--connect")
                  ("--session=%h")
                  ("%h")
-                 ("-cmd" "\"kubectl exec -it %u sh\"")
+                 ("-cmd" "\"kubectl exec -it %u -- sh\"")
                  ))
                (tramp-remote-shell       "/bin/sh")
                (tramp-remote-shell-args  ("-i" "-c"))))
@@ -151,9 +151,9 @@
            (tbox-pod-term pod)
            ))))
 
-(defun tbox-pod-term (pod &optional historyfile) 
+(defun tbox-pod-term (pod &optional historyfile)
   (interactive)
-  (tbox-make-term pod (concat "kubectl exec -it " pod " tcsh"))
+  (tbox-make-term pod (concat "kubectl exec -it " pod " -- tcsh"))
   (cd (concat "/tbox-pod:" pod "@" (tbox-session) ":/")))
 
 (defvar ncb-ip "172.16.4.146")
@@ -184,7 +184,7 @@
         (concat "\"ssh -o SendEnv=EMACS_SH -t -q -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /tmp/DPE_ROOT/TECSAS/wrl/piu_priv_key root@" ncb-ip " " program "\""))
     (if (equal program "erl")
         (setq program "/tmp/DPE_SC/LoadUnits/ttx/int/bin/to_erl"))
-    (concat "\"kubectl exec -it " (get-ncb-pod) " " program "\"")))
+    (concat "\"kubectl exec -it " (get-ncb-pod) " -- " program "\"")))
 
 (defun tbox-make-term (name program &optional is-ncb startfile historyfile &rest switches)
   (let* ((term-buffer-name (make-process-buffer-name name))
