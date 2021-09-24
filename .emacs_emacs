@@ -101,6 +101,19 @@
   )
 (ad-activate 'ediff-toggle-skip-similar)
 
+(defun my-ediff-edit-buffer  (arg &optional key)
+  "Edit/goto buffer during Ediff.
+If the second optional argument, a character, is given, use it to
+determine the target buffer."
+  (interactive "P")
+  (let* ((org-buffer (buffer-name))
+         (ediff-buffer (ediff-get-buffer (ediff-char-to-buftype (or key (ediff-last-command-char)))))
+         (org-quit-cmd (progn (pop-to-buffer ediff-buffer) (key-binding [(control g)] t)))
+         )
+    (local-set-key "\C-g" (lambda() (interactive) (local-set-key "\C-g" org-quit-cmd) (exit-recursive-edit)))
+    (recursive-edit)
+    (pop-to-buffer org-buffer)))
+
 (defun my-ediff-ipa-insert  (arg &optional key)
   "`ipa-insert' during Ediff.
 If the second optional argument, a character, is given, use it to

@@ -16,11 +16,6 @@
 
         (require 'magit-ediff)
 
-        (with-eval-after-load 'info
-          (info-initialize)
-          (add-to-list 'Info-directory-list
-                       "~/.emacs.d/site-lisp/magit/Documentation/"))
-
         ;; Uncertain if this is needed, but at some points commit editor etc ended up in wrong emacs(-server).
         (if (is-unix)
             (setq server-name (format "server%s" (emacs-pid))))
@@ -49,6 +44,21 @@
         (define-key magit-blame-mode-map [return] 'my-git-blame-open-version)
         (define-key magit-blame-mode-map [(control return)] 'my-git-blame-open-prior-version)
         ))
+
+(defun my-is-git-shell-command (command)
+  (and (featurep 'magit)
+                 (my-magit-inside-worktree-p)
+                 (string-match "^[	 ]*git\\>" command)
+                 (not (string-match "&" command))))
+
+(defun my-magit-inside-worktree-p ()
+  ;; Newer magit has added a noerror parameter and throws...
+  (condition-case err
+      (magit-inside-worktree-p)
+    (error
+     (if (eq `magit-outside-git-repo (car err))
+         nil
+       (signal (car err) (cdr err))))))
 
 (defun my-git-file-at-point ()
   (interactive)
@@ -186,7 +196,7 @@
   (let* ((ver-string (if (is-git-reference)
                          magit-buffer-refname
                        (if (my-is-in-git)
-                           (or (magit-get-current-branch)
+                           (or (and (functionp 'magit-get-current-branch) (magit-get-current-branch))
                                (vc-working-revision (my-get-buffer-file-name)))
                          nil))))
     (cond (ver-string
@@ -375,7 +385,7 @@
     (kill-buffer old-buffer)))
 
 (defun my-git-expand-file-name-with-version (name)
-  (if (my-is-in-git)
+  (if (and (featurep 'magit) (my-is-in-git))
       (let* ((version (if magit-buffer-revision
                           magit-buffer-revision
                         (if magit-buffer-refname
@@ -406,15 +416,16 @@
                (nconc (butlast (visited-file-modtime)) (list 0)))))
 
 (defadvice ask-user-about-supersession-threat
-  (around my-ask-user-about-supersession-threat (orig-fun &rest args))
+  (around my-ask-user-about-supersession-threat (&rest args))
   "Advice function to handle that backup system messes up mtime"
   (if (not (my-git-fix-messed-up-modtime))
-      (apply orig-fun args)))
+      (apply (ad-get-orig-definition 'ask-user-about-supersession-threat) args)))
 (ad-activate 'ask-user-about-supersession-threat)
 
+(defvar git-grep-history nil)
 (defun git-grep (what)
-    "Run git grep on WHAT in current repo."
-    (interactive)
+    "Run git grep on what in current repo."
+    (interactive (list (read-shell-command "git grep: " nil 'git-grep-history)))
     (let ((top-dir (magit-toplevel)))
       (my-compilation-start (concat "git grep --full-name -ni \"" what "\" " top-dir) 
                             nil

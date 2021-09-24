@@ -11,7 +11,8 @@
 
 
 ;; GIT
-
+(if (featurep 'mygit)
+    (unload-feature 'mygit)) ; Force re-load of .emacs_git
 (make-variable-buffer-local 'file-checkedout)
 (make-variable-buffer-local 'frame-title-format)
 (setq-default file-checkedout nil)

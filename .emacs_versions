@@ -68,9 +68,12 @@
 (if (> emacs-major-version 23)
     (progn
       (defvar directory-sep-char 92 "Parameter removed in emacs 24")
-      ;; Added for magit...
-      (require 'package)
 
+      (if (and (= emacs-major-version 24) (< emacs-minor-version 4))
+          (defalias 'frameset-to-register 'frame-configuration-to-register))
+
+      (require 'package)
+      (setq my-packages '(package-utils magit org helm go-mode))
       ;;(add-to-list 'package-archives
       ;;             '("marmalade" . "https://marmalade-repo.org/packages/"))
       ;;(add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/"))
@@ -79,7 +82,16 @@
       ;; stuff.
       ;; (add-to-list 'package-archives<br />
       ;;              '("elpa" . "http://tromey.com/elpa/"))
+      (if (< emacs-major-version 25)
+          (setq package-user-dir "~/.emacsold.d/elpa"))
       (package-initialize)
-      (if (and (= emacs-major-version 24) (< emacs-minor-version 4))
-          (defalias 'frameset-to-register 'frame-configuration-to-register))
+
+      (defun package-install-all ()
+        (interactive)
+        (package-refresh-contents)
+        (dolist (p my-packages)
+          (unless (package-installed-p p)
+            (package-install p)))
+        ;; Reload everything
+        (load ".emacs"))
       ))

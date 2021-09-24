@@ -1,11 +1,9 @@
-;;; Main emacs init file, .emacs
+;;; Main emacs init file, .emacs 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Add HOME and HOME/emacs to load-path
 (setq load-path (append load-path (list "~/emacs")))
 (setq load-path (append load-path (list (getenv "HOME"))))
-
-(require 'dired)
 
 ;; Requires > 24.3
 (if (or (and (= emacs-major-version 24)
@@ -14,6 +12,8 @@
     (progn
       (require 'benchmark-init-loaddefs)
       (benchmark-init/activate)))
+
+(require 'dired)
 
 ;; Let shell know that it's running in Emacs
 (setenv "EMACS_SH" "t")
@@ -209,10 +209,7 @@ run several jobs simultanously"
   (interactive (list (read-shell-command "Shell command: ")))
   (let ((error-buffer "*Shell Command Error*"))
     (message (concat "Executing: " command " ..."))
-    (cond ( (and (featurep 'magit)
-                 (magit-inside-worktree-p)
-                 (string-match "^[	 ]*git\\>" command)
-                 (not (string-match "&" command)))
+    (cond ( (and (functionp 'my-is-git-shell-command) (my-is-git-shell-command command))
             (magit-shell-command command))
 
           ( t
