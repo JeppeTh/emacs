@@ -9,9 +9,8 @@
 (if (or (and (= emacs-major-version 24)
 	     (>= emacs-minor-version 3))
 	(> emacs-major-version 24))
-    (progn
-      (require 'benchmark-init-loaddefs)
-      (benchmark-init/activate)))
+    (if (require 'benchmark-init-loaddefs nil t)
+        (benchmark-init/activate)))
 
 (require 'dired)
 
@@ -459,6 +458,67 @@ On attempt to pass beginning of prompt, stop and signal error."
 
 ;;(add-hook 'term-mode-hook 'my-term-shell-mode-hook t)
 
+(defun my-ring-ref (ring index)
+  (and (> (ring-length ring) 0) (ring-ref ring index)))
+
+(defun my-simple-send (proc string)
+  "As `term-simple-send'/`comint-simple-send' but skips the newline."
+  (if my-term-shell-mode
+      (term-send-string proc string)
+    (comint-send-string proc string)))
+
+(defun my-send-tab ()
+  "Sends a tab to the shell to get completions on input"
+  (interactive)
+  (let* ((org-term-fun term-input-sender)
+         (org-comint-fun comint-input-sender)
+         (used-ring (if my-term-shell-mode term-input-ring comint-input-ring))
+         (last-history (my-ring-ref used-ring 0)))
+    (condition-case nil
+        (progn
+          (setq-local term-input-sender (function my-simple-send))
+          (setq-local comint-input-sender (function my-simple-send))
+          (insert "	")
+          (my-send-input)
+          (run-at-time 0.1 nil 'my-strip-completion-tab)
+          (if (not (eq last-history (my-ring-ref used-ring 0)))
+              (ring-remove used-ring 0))
+          )
+      (quit
+       nil)
+      (error
+       nil))
+    (setq-local term-input-sender org-term-fun)
+    (setq-local comint-input-sender org-comint-fun)
+    t
+    ))
+
+(defun my-send-input ()
+  (if my-term-shell-mode
+      (term-send-input)
+    (comint-send-input)))
+
+(defun my-send-return ()
+  (interactive)
+  (let* ((cmd (if my-term-shell-mode
+                  (term-get-old-input-default)
+                (comint-get-old-input-default)))
+         (used-ring (if my-term-shell-mode term-input-ring comint-input-ring))
+         (last-history (my-ring-ref used-ring 0))
+         )
+    (end-of-line)
+    (my-send-input)
+    ;; If beginning of cmd is completed by shell, only the typed arguments
+    ;; will be stored in the history. Replace this entry with the complete
+    ;; command in that case.
+    (if (and (not (string-equal (my-ring-ref used-ring 0) cmd))
+             (not (string-equal (my-ring-ref used-ring 0) last-history)))
+        (ring-remove used-ring 0))
+    ;; Insert cmd as last entry in history in case it been filtered out or
+    ;; removed
+    (if (not (string-equal (my-ring-ref used-ring 0) cmd))
+        (ring-insert used-ring cmd))))
+
 (defvar activate-mark-hook nil "This hook is run when a mark is set")
 (defvar deactivate-mark-hook nil "This hook is run when a mark is removed")
 
@@ -534,6 +594,27 @@ On attempt to pass beginning of prompt, stop and signal error."
 (add-hook 'grep-mode-hook
           (lambda () (local-set-key "k" 'kill-all-matching-lines)))
 
+(defun my-js-mode-hook ()
+  (local-unset-key "\e\C-x")
+  (global-set-key "\e\C-x\C-d" 'my-vc-ediff-other-current-buffer)
+  (local-set-key [return]   'newline-and-indent)
+  (local-set-key [S-return]  'newline)
+  )
+
+(add-hook 'js-mode-hook 'my-js-mode-hook t)
+
+(require 'hideshow)
+(when (require 'json-mode nil t)
+  (setq hs-special-modes-alist (append hs-special-modes-alist '((json-mode "[{[]" "[}\\]]" "/[*/]" nil))))
+  (defun my-json-mode ()
+    (interactive)
+    (hs-minor-mode)
+    (json-mode-beautify)
+    (local-set-key [tab] 'hs-toggle-hiding)
+    )
+
+  (add-hook 'json-mode-hook 'my-json-mode t))
+
 ;; Windows stuff
 (defun my-strip-strlm ()
   (goto-char (point-min))
@@ -600,13 +681,8 @@ On attempt to pass beginning of prompt, stop and signal error."
         (setq-default ps-printer-name printer-name)
 
         ;; Support for shortcuts
-        (add-hook 'dired-load-hook (lambda () (require 'w32-symlinks)))
-        ;;(load "w32-symlinks")
-        (custom-set-variables
-         ;; custom-set-variables was added by Custom -- don't edit or cut/paste it!
-         ;; Your init file should contain only one such instance.
-         '(w32-symlinks-handle-shortcuts t))
-
+        ;;(require 'w32-symlinks)
+        ;;(setq-default w32-symlinks-handle-shortcuts t)
         ;; Clearcase needs this
         (require 'executable)
         )

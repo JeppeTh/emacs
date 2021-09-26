@@ -84,55 +84,15 @@ containing a tab or beginning with a '('."
         nil
       (my-send-tab))))
 
-(defun my-ring-ref (ring index)
-  (and (> (ring-length ring) 0) (ring-ref ring index)))
-
 (defun my-kill-input ()
   (if my-term-shell-mode
       (term-kill-input)
     (comint-kill-input)))
 
-(defun my-send-input ()
-  (if my-term-shell-mode
-      (term-send-input)
-    (comint-send-input)))
-
-(defun my-send-tab ()
-  "Sends a tab to the shell to get completions on input"
-  (interactive)
-  (let* ((org-term-fun term-input-sender)
-         (org-comint-fun comint-input-sender)
-         (used-ring (if my-term-shell-mode term-input-ring comint-input-ring))
-         (last-history (my-ring-ref used-ring 0)))
-    (condition-case nil
-        (progn
-          (setq-local term-input-sender (function my-simple-send))
-          (setq-local comint-input-sender (function my-simple-send))
-          (insert "	")
-          (my-send-input)
-          (run-at-time 0.1 nil 'my-strip-completion-tab)
-          (if (not (eq last-history (my-ring-ref used-ring 0)))
-              (ring-remove used-ring 0))
-          )
-      (quit
-       nil)
-      (error
-       nil))
-    (setq-local term-input-sender org-term-fun)
-    (setq-local comint-input-sender org-comint-fun)
-    t
-    ))
-
 (defun my-strip-completion-tab ()
   "Removes trailing tabs when no further completion is possible."
   (if (re-search-backward  "\\(	+$\\)" (point-at-bol) t)
       (replace-match "")))
-
-(defun my-simple-send (proc string)
-  "As `term-simple-send'/`comint-simple-send' but skips the newline."
-  (if my-term-shell-mode
-      (term-send-string proc string)
-    (comint-send-string proc string)))
 
 (defun my-send-backspace ()
   "Sends a backspace to the shell. Useful when using `my-send-tab' 
@@ -143,27 +103,6 @@ for completion since a backspace then must also be sent to the shell."
         (error "At prompt")
       (let ((proc (get-buffer-process (current-buffer))))
         (process-send-string proc (char-to-string 127))))))
-
-(defun my-send-return ()
-  (interactive)
-  (let* ((cmd (if my-term-shell-mode
-                  (term-get-old-input-default)
-                (comint-get-old-input-default)))
-         (used-ring (if my-term-shell-mode term-input-ring comint-input-ring))
-         (last-history (my-ring-ref used-ring 0))
-         )
-    (end-of-line)
-    (my-send-input)
-    ;; If beginning of cmd is completed by shell, only the typed arguments
-    ;; will be stored in the history. Replace this entry with the complete
-    ;; command in that case.
-    (if (and (not (string-equal (my-ring-ref used-ring 0) cmd))
-             (not (string-equal (my-ring-ref used-ring 0) last-history)))
-        (ring-remove used-ring 0))
-    ;; Insert cmd as last entry in history in case it been filtered out or
-    ;; removed
-    (if (not (string-equal (my-ring-ref used-ring 0) cmd))
-        (ring-insert used-ring cmd))))
 
 (defun my-erlang-quit ()
   (interactive)

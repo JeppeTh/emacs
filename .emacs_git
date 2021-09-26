@@ -95,7 +95,7 @@
   (local-set-key  "e"      'my-git-ediff-pred-at-point)
   (local-set-key  "\C-d"   'my-git-ediff-pred-at-point)
   (local-set-key  "\e\C-d" 'my-git-ediff-other-version-at-point)
-  (local-set-key  "\C-f"   'magit-ediff-resolve)
+  (local-set-key  "\C-e"   'magit-ediff-resolve)
   )
 
 (defun my-magit-log-mode-hook ()

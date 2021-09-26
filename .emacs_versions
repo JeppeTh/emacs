@@ -73,7 +73,14 @@
           (defalias 'frameset-to-register 'frame-configuration-to-register))
 
       (require 'package)
-      (setq my-packages '(package-utils magit org helm go-mode))
+      (setq my-packages '(package-utils
+                          ;;benchmark-init
+                          magit
+                          json-mode
+                          js2-mode
+                          org
+                          helm
+                          go-mode))
       ;;(add-to-list 'package-archives
       ;;             '("marmalade" . "https://marmalade-repo.org/packages/"))
       ;;(add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/"))
