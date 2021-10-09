@@ -14,7 +14,7 @@
 ;; If no DISPLAY is set, swap Delete and Backspace
 ;; Otherwise Backspace will work as the help-character C-h.
 (if (and (is-unix) (not (getenv "DISPLAY")))
-    (load "term/bobcat.el"))
+    (load "term/bobcat.el" t))
 
 ;; Turn on delete selection mode
 (delete-selection-mode 1)
@@ -32,6 +32,7 @@
 
 ;; Key Bindings
 (global-set-key "\e."      'my-find-tag)
+(global-set-key "\e*"      'pop-tag-mark)
 (global-set-key "\e,"      'find-next-tag)
 (global-set-key [?\C-\M-,] 'find-next-tag-regexp)
 (global-set-key [mouse-2]  'my-mouse-yank)

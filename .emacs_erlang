@@ -89,11 +89,6 @@ containing a tab or beginning with a '('."
       (term-kill-input)
     (comint-kill-input)))
 
-(defun my-strip-completion-tab ()
-  "Removes trailing tabs when no further completion is possible."
-  (if (re-search-backward  "\\(	+$\\)" (point-at-bol) t)
-      (replace-match "")))
-
 (defun my-send-backspace ()
   "Sends a backspace to the shell. Useful when using `my-send-tab' 
 for completion since a backspace then must also be sent to the shell."

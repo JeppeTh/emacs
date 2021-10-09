@@ -1,6 +1,5 @@
-(add-hook 'find-file-hooks 'my-git-title t)
-(add-hook 'find-file-hooks 'my-git-file-status t)
-(add-hook 'dired-after-readin-hook 'my-git-title t)
+(add-hook 'find-file-hooks 'my-git-hook t)
+(add-hook 'dired-after-readin-hook 'my-git-hook t)
 
 (defun my-set-default-magit-log-arguments (extra)
   (if (boundp 'magit-log-arguments)
@@ -25,7 +24,7 @@
         (set-face-foreground 'magit-blame-heading "lightgrey")
         (add-hook 'magit-ediff-quit-hook  'my-ediff-quit t)
         (remove-hook 'magit-ediff-quit-hook 'magit-ediff-restore-previous-winconf)
-        (add-hook 'magit-find-file-hook 'my-git-title t)
+        (add-hook 'magit-find-file-hook 'my-git-hook t)
         (add-hook 'magit-find-file-hook 'ipa-load-annotations-into-buffer t)
         (add-hook 'magit-status-mode-hook 'my-magit-status-mode-hook)
         (add-hook 'magit-log-mode-hook 'my-magit-log-mode-hook)
@@ -38,12 +37,18 @@
         (global-set-key "\C-xvs" 'magit-status)
         (if (functionp 'magit-status-quick)
             (global-set-key "\C-xvs" 'magit-status-quick))
-        (global-set-key "\C-xv?" 'magit-log-buffer-file)
         (define-key magit-blame-mode-map "e"      'my-git-blame-ediff)
         (define-key magit-blame-mode-map "b"      'magit-blame)
         (define-key magit-blame-mode-map [return] 'my-git-blame-open-version)
         (define-key magit-blame-mode-map [(control return)] 'my-git-blame-open-prior-version)
         ))
+
+(defun my-git-hook (&rest args)
+  (when (my-is-in-git)
+    (my-git-title)
+    (my-git-file-status)
+    (local-set-key "\C-xv?"  'magit-log-buffer-file)
+    (local-set-key "\C-\M-w" 'my-git-copy-commit)))
 
 (defun my-is-git-shell-command (command)
   (and (featurep 'magit)
@@ -97,6 +102,12 @@
   (local-set-key  "\e\C-d" 'my-git-ediff-other-version-at-point)
   (local-set-key  "\C-e"   'magit-ediff-resolve)
   )
+
+(defadvice magit-insert-unpushed-to-upstream-or-recent
+  (before my-magit-insert-unpushed-to-upstream-or-recent ())
+  "Advice function to add --no-merges"
+  (setq magit-buffer-log-args (add-to-list ' magit-buffer-log-args "--no-merges")))
+(ad-activate 'magit-insert-unpushed-to-upstream-or-recent)
 
 (defun my-magit-log-mode-hook ()
   (interactive)
@@ -208,7 +219,7 @@
                  ))
            ))))
 
-(defun my-git-file-status (&rest args)
+(defun my-git-file-status ()
   (cond ( (and (my-is-in-git) (not (is-git-reference)))
           (if (eq (vc-git-state buffer-file-name) 'up-to-date)
               (read-only-mode (not (setq file-checkedout nil)))
@@ -398,6 +409,13 @@
         (replace-regexp-in-string "\\([^@]+\\)\\(@@.+\\)?$" (concat "\\1@@" version) name))
     name))
 
+(defun my-git-copy-commit ()
+  (interactive)
+  (let ((commit (if magit-buffer-revision
+                    magit-buffer-revision
+                  (magit-rev-hash "HEAD"))))
+    (kill-new (message "%s" commit))))
+
 (defun my-git-fix-messed-up-modtime ()
   "Updates the buffers modtime in case file has been messed up by backup system"
   (interactive)
@@ -427,7 +445,7 @@
     "Run git grep on what in current repo."
     (interactive (list (read-shell-command "git grep: " nil 'git-grep-history)))
     (let ((top-dir (magit-toplevel)))
-      (my-compilation-start (concat "git grep --full-name -ni \"" what "\" " top-dir) 
+      (my-compilation-start (concat "git grep --full-name -ni \"" what "\" \"" top-dir "\"") 
                             nil
                             (lambda (n) "*git-grep*")
                             'grep-mode)

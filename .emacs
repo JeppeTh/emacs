@@ -21,7 +21,7 @@
 (defun is-windows ()
   "Checks in case environment is Windows"
   (interactive)
-  (string-match "Windows" (or (getenv "OS") (getenv "OSTYPE"))))
+  (string-match "Windows" (or (getenv "OS") (getenv "OSTYPE") "")))
 
 (defun is-unix ()
   "Checks in case environment is Unix"
@@ -103,10 +103,11 @@
 (setq-default ps-number-of-columns 2)
 (setq-default ps-spool-duplex t)
 
-(require 'ipa)
-(setq-default ipa-overlay-position "below")
-(setq-default ipa-file "/proj/sgsn_rest/work/ervjest/.ipa")
-(add-hook 'ipa-mode-hook (lambda () (auto-revert-mode t)))
+(when (require 'ipa nil t)
+  (setq-default ipa-overlay-position "below")
+  (setq-default ipa-file "/proj/sgsn_rest/work/ervjest/.ipa")
+  (add-hook 'ipa-mode-hook (lambda () (auto-revert-mode t)))
+  )
 
 (defun decode-ipa ()
   (interactive)
@@ -467,6 +468,11 @@ On attempt to pass beginning of prompt, stop and signal error."
       (term-send-string proc string)
     (comint-send-string proc string)))
 
+(defun my-strip-completion-tab ()
+  "Removes trailing tabs when no further completion is possible."
+  (if (re-search-backward  "\\(	+$\\)" (point-at-bol) t)
+      (replace-match "")))
+
 (defun my-send-tab ()
   "Sends a tab to the shell to get completions on input"
   (interactive)
@@ -609,7 +615,7 @@ On attempt to pass beginning of prompt, stop and signal error."
   (defun my-json-mode ()
     (interactive)
     (hs-minor-mode)
-    (json-mode-beautify)
+    ;;(json-mode-beautify)
     (local-set-key [tab] 'hs-toggle-hiding)
     )
 
@@ -747,7 +753,7 @@ On attempt to pass beginning of prompt, stop and signal error."
           )
         )
       )
-    (if (not (string-match erl-root-dir (getenv "MANPATH")))
+    (if (not (string-match erl-root-dir (or (getenv "MANPATH") "")))
         (setenv "MANPATH" (concat erl-root-dir "/man:" (getenv "MANPATH"))))
     ;;(replace-regexp-in-string "\n" "" erl-bin-dir)
     erl-bin-dir
