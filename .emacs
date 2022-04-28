@@ -938,11 +938,12 @@ On attempt to pass beginning of prompt, stop and signal error."
   (if (>= 80 (length name))
       name
     ;; Name longer th 80 found
-
     (setq name (substring (concat (reverse (string-to-list name))) 0 77))
     (setq name (concat (reverse (string-to-list name))))
-    (if (eq (string-match "\\([^/]+\\)/.+" name) 0)
-        (setq name (replace-match "" nil nil name 1)))
+    (save-match-data
+      (if (eq (string-match "\\([^/]+\\)/.+" name) 0)
+          (setq name (replace-match "" nil nil name 1)))
+      )
     (concat "..." name)))
 
 

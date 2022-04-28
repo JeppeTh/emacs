@@ -89,7 +89,7 @@
       ;; stuff.
       ;; (add-to-list 'package-archives<br />
       ;;              '("elpa" . "http://tromey.com/elpa/"))
-      (if (< emacs-major-version 25)
+      (if (< emacs-major-version 26)
           (setq package-user-dir "~/.emacsold.d/elpa"))
       (package-initialize)
 

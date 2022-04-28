@@ -25,7 +25,6 @@
         (add-hook 'magit-ediff-quit-hook  'my-ediff-quit t)
         (remove-hook 'magit-ediff-quit-hook 'magit-ediff-restore-previous-winconf)
         (add-hook 'magit-find-file-hook 'my-git-hook t)
-        (add-hook 'magit-find-file-hook 'ipa-load-annotations-into-buffer t)
         (add-hook 'magit-status-mode-hook 'my-magit-status-mode-hook)
         (add-hook 'magit-log-mode-hook 'my-magit-log-mode-hook)
         (add-hook 'magit-revision-sections-hook (lambda (&optional TAG)
@@ -47,6 +46,10 @@
   (when (my-is-in-git)
     (my-git-title)
     (my-git-file-status)
+
+    (if (featurep 'ipa)
+        (ipa-load-annotations-into-buffer))
+
     (local-set-key "\C-xv?"  'magit-log-buffer-file)
     (local-set-key "\C-\M-w" 'my-git-copy-commit)))
 
@@ -177,6 +180,7 @@
                            (magit-ediff-compare (car (magit-split-range my-git-diff-target)) nil (ffap-string-at-point) (ffap-string-at-point)))))
     (local-set-key [S-return] 'my-find-file-at-point)
     (local-set-key [C-return] 'my-find-file-at-point)
+    (local-set-key "k"        'kill-all-matching-lines)
     ))
 
 (defun git-man (entry)
@@ -233,12 +237,14 @@
 (defun is-in-my-git-workspace ()
   (let* ((target (my-get-buffer-file-name))
          (gsn_ws_root (getenv "GSN_WS_ROOT"))
-         (gsn_git_root (replace-regexp-in-string (concat "/" (user-login-name) ".*") "" gsn_ws_root))
+         (gsn_git_root (and gsn_ws_root
+                            (replace-regexp-in-string (concat "/" (user-login-name) ".*") "" gsn_ws_root)))
          )
     (and
      target
      (my-is-in-git)
-     (or (not (string-match gsn_git_root target))
+     (or (not gsn_ws_root)
+         (not (string-match gsn_git_root target))
          (and gsn_ws_root
               (or (not (boundp 'clearcase-setview-viewtag))
                   (string-match (concat "/" clearcase-setview-viewtag "\\(/.+\\)?$") gsn_ws_root))

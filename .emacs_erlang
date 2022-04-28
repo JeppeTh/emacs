@@ -10,6 +10,9 @@
   (add-to-list 'compilation-error-regexp-alist 'bt_run)
   (add-to-list 'compilation-error-regexp-alist-alist
                '(bt_run "^\\([^	 :\n]+\\):\\([0-9]+\\):\\([^:]+\\):\\( warning:\\).*" 1 2 nil (4) 1))
+  (add-to-list 'compilation-error-regexp-alist 'run_tests)
+  (add-to-list 'compilation-error-regexp-alist-alist
+               '(run_tests "^\\([^>]+>\\)? ?\\([^	 :\n]+\\):\\([0-9]+\\):\\([^:]*[Ww]arning[^:]*:\\)?" 2 3 nil (4) 2))
 ;;  (add-to-list 'compilation-error-regexp-alist-alist
                ;;'(bt_run "^\\(\\([^	 :\n]+\\):\\([0-9]+\\):\\([^:]+\\):\\( warning:\\).*\\)\\|\\(\\(^### TestCase[^#\n]+ #+\\)\\|\\(^Testing current_dir: TEST COMPLETE\\).*$\\)" 2 3 nil (5 . 6) 2 (6 compilation-info-face)))
 ;;               '(bt_run "^\\(\\([^	 :\n]+\\):\\([0-9]+\\):\\([^:]+\\):\\( warning:\\).*\\)\\|\\(^Testing current_dir: TEST COMPLETE.*$\\)" 2 3 nil (5 . 6) 2 (6 compilation-info-face)))
@@ -472,6 +475,14 @@ case buffer is too big"
         )
   )
 
+(defun get-ct-buffer-name (cmd)
+  "Returns the component buffer name"
+  (if (string-match "bt_run" cmd)
+      (concat "*bt_run<" (get-ct-name) ">*")
+    (if (string-match "-suite \\([^ ]*\\)" cmd)
+        (concat "*ct_run<" (match-string 1 cmd) ">*")
+      (concat "*ct_run<" (get-ct-name) ">*"))))
+
 (defun bt-erl ()
   "This is just like running bt_erl in a normal shell, except that
 an Emacs buffer is used for input and output.
@@ -537,38 +548,44 @@ editing control characters:
   (imenu--make-index-alist)
   ;; end rescan
   (let* ((org-buffer (buffer-name)))
-    (my-ct-run (concat "bt_run -p . " (erlang-get-module) " " (determine-tc)))
+    (if (string-match "_restricted/test/" default-directory)
+        (my-ct-run (concat "run_tests -no_build -suite " (erlang-get-module) " -testcase " (determine-tc)))
+      (my-ct-run (concat "bt_run -p . " (erlang-get-module) " " (determine-tc))))
     (switch-to-buffer-other-window org-buffer))
   )
 
 (defun my-ct-run-suite ()
   "Use bt_run to run current test SUITE."
   (interactive)
-  (my-ct-run (concat "bt_run -c . " (erlang-get-module)))
+  (if (string-match "_restricted/test/" default-directory)
+      (my-ct-run (concat "run_tests -no_build -suite " (erlang-get-module)))
+    (my-ct-run (concat "bt_run -c . " (erlang-get-module))))
   (delete-other-windows)
   )
 
 (defun my-ct-run-all ()
   "Use bt_run to run all SUITES in current directory."
   (interactive)
-  (my-ct-run "bt_run -c .")
+  (if (string-match "_restricted/test/" default-directory)
+      (my-ct-run "run_tests -no_build")
+    (my-ct-run "bt_run -c ."))
   (delete-other-windows)
   )
 
 (defun my-ct-run (cmd)
-  "Help fun used for running bt_run"
+  "Help fun used for running bt_run/ct_run"
   (interactive)
-  (let ((new-buffer-name (concat "*bt_run<" (get-ct-name) ">*")))
+  (let ((new-buffer-name (get-ct-buffer-name cmd)))
     ;; Kill old buffer if already exists
     (if (get-buffer new-buffer-name)
         (kill-buffer new-buffer-name))
-    (switch-to-buffer-other-window (buffer-name (compile cmd)))
+    (execute-ct-run cmd new-buffer-name)
+
     (make-local-variable 'compilation-skip-threshold)
     (setq compilation-skip-threshold 2)
     ;;;; Add this for recompile case...
     ;;(add-hook 'compilation-mode-hook (lambda () (setq compilation-skip-threshold 2)) t t)
-    (rename-buffer new-buffer-name)
-    (set-process-query-on-exit-flag 
+    (set-process-query-on-exit-flag
      (get-buffer-process new-buffer-name) nil)
     (local-set-key "\C-t"   'browse-last-test)
     ;; Recompile kills all variables, so re-map
@@ -577,6 +594,35 @@ editing control characters:
     )
   )
 
+(defun execute-ct-run (cmd name)
+  (let* ((is-bt-run (string-match "bt_run" cmd))
+         (cmd-buffer nil)
+         (cmd-switches (if (not is-bt-run)
+                           (split-string (car (cdr (split-string cmd "run_tests "))) " "))))
+    (setq cmd-buffer
+          (if is-bt-run
+              (compile cmd)
+            (apply 'make-term (append (list name "run_tests" nil) cmd-switches))))
+    (switch-to-buffer-other-window cmd-buffer)
+    (rename-buffer name)
+
+    (when (not is-bt-run)
+      (set-process-sentinel
+       (get-buffer-process (buffer-name))
+       (lambda(p e)
+         (local-set-key "\C-xr" (lambda()
+                                  "test"
+                                  (interactive)
+                                  (let ((name (buffer-name)))
+                                    (kill-buffer name)
+                                    (execute-ct-run cmd name))))
+         ))
+      (setq-local term-prompt-regexp "^([^>]+> ?")
+      (compilation-minor-mode)
+      (local-set-key [up]   'previous-line)
+      (local-set-key [down] 'next-line)
+      (add-to-history 'compile-history cmd)
+      )))
 
 (defun my-compile-test-module ()
   "Compile GTT module in case of GTT module. Otherwise runs `erlang-compile'."
@@ -656,14 +702,20 @@ editing control characters:
 (defun browse-last-test ()
   "Opens last_test.html from last bt-erl run"
   (interactive)
-  (let* ((result (if (file-readable-p "last_test.html") "last_test.html"))
-         (result (if (file-readable-p ".ct_logs/index.html") ".ct_logs/index.html" result)))
-
-    (if (not result)
-        (message "No html-file found")
-      (if (get-buffer-process (get-buffer "*lynx*"))
-          (kill-buffer "*lynx*"))
-      (browse-url result))))
+  (let* ((result (cond ((file-readable-p ".ct_logs/suite.log.latest.html")
+                        ".ct_logs/suite.log.latest.html")
+                       ((file-readable-p "last_test.html")
+                        "last_test.html")
+                       ((file-readable-p "last_interactive.html")
+                        "last_interactive.html")
+                       ((file-readable-p ".ct_logs/index.html")
+                        ".ct_logs/index.html")
+                       (t
+                        (error "No html-file found"))
+                       )))
+    (if (get-buffer-process (get-buffer "*lynx*"))
+        (kill-buffer "*lynx*"))
+    (browse-url result)))
 
 (defun gtt-testcase-mode ()
   "Fix indentation etc for output from get_failing_gtt_tests.pl"

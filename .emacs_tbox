@@ -16,8 +16,9 @@
     (if (not (string-match "Command not found" (tbox-cmd-to-string "which kubectl")))
         (setq tbox-container-session tbox-session))
     (message nil)
-    (if (not (eq (concat tbox-session tbox-host) old-tbox))
-        (fix-tecsas-env)))
+    (when (not (eq (concat tbox-session tbox-host) old-tbox))
+      (setq tbox-pods nil)
+      (fix-tecsas-env)))
 )
 
 (defun tbox-session ()

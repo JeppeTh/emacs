@@ -188,8 +188,10 @@ determine the target buffer."
   (define-key ediff-mode-map "inc" 'my-ediff-ipa-next)
   (local-set-key "\C-r" 'ediff-revert-buffers-then-recompute-diffs)
   ;: Seems updaing diffs breaks resolve in Emacs 26
-  (if (not (eq ediff-job-name 'ediff-merge-buffers))
-      (ediff-update-diffs))
+  (when (not (eq ediff-job-name 'ediff-merge-buffers))
+    (ediff-update-diffs)
+    (ediff-jump-to-difference 1)
+    )
 
   ;;(let ((top-pos  (- (frame-parameter nil `top) 22)))
   ;;  (ediff-toggle-wide-display)
