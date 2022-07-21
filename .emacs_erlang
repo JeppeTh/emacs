@@ -295,92 +295,50 @@ permanently the indentation in Erlang mode would be incorrect."
   (set-process-query-on-exit-flag inferior-erlang-process nil))
 
 (defun my-spec-font-lock-matcher (limit)
-  (interactive)
-  ;;(message "limit set to %s" limit)
-  "Fontifies -spec expressions as `font-lock-comment-face"
-  ;; search for the begin of the first region
-  (when (re-search-forward "^[ \t]*\-spec" limit t)
-    (let ((beg (match-beginning 0)) end ; 1st Region
-          )
-      ;; search for end of region 1
-      ;;(if (re-search-forward "[^%]*\\.\\|^[^%]*\\." limit t)
-      (if (re-search-forward "^[^%]+\\.[	 ]*\\(%.*\\)*$" limit t)
-          (setq end (match-end 0))
-        ;; no match -> length of region 1 = 0
-        (setq end (point)))
-      ;; save the regions
-      (store-match-data (list beg end))
-      t)))
+  (re-search-forward my-erlang-spec-regexp limit t))
 
+(defvar my-erlang-spec-regexp "^[ 	]*-spec\\(.+
+\\)*? [^%
+]+?\\.[ 	]*\\(%.*?\\)?$")
+(defvar my-erlang-spec-start-regexp "^[ 	]*-spec")
+(defvar my-erlang-spec-end-regexp "^[^%
+]+?\\.[ 	]*\\(%.*?\\)?$")
 (eval-when-compile (defvar font-lock-beg) (defvar font-lock-end))
 (defun my-font-lock-extend-region ()
   (interactive)
-  ;;(message "%s: font-lock-beg:%s font-lock-end:%s" (format-time-string "%T") font-lock-beg font-lock-end)
+  ;;(message "%s: Enter font-lock-beg:%s font-lock-end:%s" (format-time-string "%T") font-lock-beg font-lock-end)
   (save-excursion
-    (let* ((spec-start-regexp "^[ \t]*\-spec")
-           (spec-end-regexp "^[^%]+\\.\\([	 ]*%.*\\)?$")
-           ;; Check if beginning of a spec is found within region
-           (spec-start (progn (goto-char font-lock-beg)
-                              (if (re-search-forward spec-start-regexp font-lock-end t)
-                                  (match-beginning 0))))
-           ;; That spec is only interestin in case it's in the beginning of the region.
-           ;; Otherwise we need to search for an end of a spec above it but within region
-           (spec-start (if (eq spec-start font-lock-beg)
-                           ;; Region is beginning of spec
-                           font-lock-beg
-                         (if spec-start
-                             (progn
-                               (goto-char spec-start)
-                               (if (re-search-backward spec-end-regexp font-lock-beg t)
-                                   ;; Beginning of spec is missing in region
-                                   nil
-                                 spec-start)))))
-           ;; Find the end of a spec above the region - if necessary
-           (limit (if spec-start
-                      nil
-                    (goto-char font-lock-beg)
-                    (if (re-search-backward spec-end-regexp nil t)
-                        (match-end 0))))
-           ;; Search for spec starting above region if necessary
-           (spec-start (if spec-start
-                           spec-start
-                         (goto-char font-lock-beg)
-                         (re-search-backward spec-start-regexp limit t)))
-           ;; Now find the last spec within region
-           (last-spec-start (if (not spec-start)
-                                nil
-                              (goto-char spec-start)
-                              (while (re-search-forward spec-start-regexp font-lock-end t)
-                                (goto-char (match-end 0)))
-                              (match-beginning 0)))
+    (let ((new-start nil)
+          (new-end nil))
 
-           ;; Now search for the end of the last spec witin region
-           (spec-end (if (not last-spec-start)
-                         nil
-                       ;; Don't search beyond spec starting after region
-                       (goto-char (+ last-spec-start 1))
-                       (setq limit
-                             (if (re-search-forward spec-start-regexp nil t)
-                                 (match-beginning 0)))
-                       (goto-char last-spec-start)
-                       (re-search-forward spec-end-regexp limit t)))
-           )
+      ;; Check if beginning of a spec begins before region
+      (goto-char font-lock-beg)
+      (when (re-search-forward my-erlang-spec-end-regexp font-lock-end t)
+        (goto-char (+ 1 (match-end 0)))
+        (when (re-search-backward my-erlang-spec-regexp nil t)
+          (if (and (> font-lock-beg (match-beginning 0))
+                   (> (match-end 0) font-lock-beg))
+              ;; Top spec is before region
+              (setq new-start (match-beginning 0)))))
 
-      (if (and spec-start
-               spec-end
-               (or (< spec-start font-lock-beg) (> spec-end font-lock-end))
-               )
-          ;; So we found a spec and it start/ends outside region - lets extend it.
-          (progn
-            ;;(message "%s: spec-beg:%s spec-end:%s" (format-time-string "%T") spec-start spec-end)
-            (if (< spec-start font-lock-beg)
-                (setq font-lock-beg spec-start))
-            (if (> spec-end font-lock-end)
-                (setq font-lock-end spec-end))
-            ;;(message "%s: Changed font-lock-beg:%s font-lock-end:%s" (format-time-string "%T") font-lock-beg font-lock-end)
-            t)
-        ;;(message "%s: No change" (format-time-string "%T"))
-        ))))
+      ;; Check if last spec ends after region
+      (goto-char font-lock-end)
+      (when (re-search-backward my-erlang-spec-start-regexp font-lock-beg t)
+        (goto-char (- (match-beginning 0) 1))
+        (when (re-search-forward my-erlang-spec-regexp nil t)
+          (if (> (match-end 0) font-lock-end)
+              ;; Last spec ends after region
+              (setq new-end (match-end 0)))))
+
+      (when (or new-start new-end)
+        ;; So we found a specs that start/ends outside the region - lets extend it.
+        ;;(message "%s: Org font-lock-beg:%s font-lock-end:%s" (format-time-string "%T") font-lock-beg font-lock-end)
+        ;;(message "%s: new-start:%s new-end:%s" (format-time-string "%T") new-start new-end)
+        (if new-start (setq font-lock-beg new-start))
+        (if new-end (setq font-lock-end new-end))
+        ;;(message "%s: Changed font-lock-beg:%s font-lock-end:%s" (format-time-string "%T") font-lock-beg font-lock-end)
+        t)
+      )))
 
 (defun my-erlang-mode-hook ()
   ; Syntax
@@ -427,24 +385,7 @@ permanently the indentation in Erlang mode would be incorrect."
                'erlang-electric-check-buffer-size)
   (make-local-variable 'font-lock-extend-region-functions)
   (add-hook 'font-lock-extend-region-functions 'my-font-lock-extend-region)
-  ;;(font-lock-add-keywords nil '((my-spec-font-lock-matcher (0 font-lock-comment-face))))
-  ;;(setq comment-start-skip "\\(^[ 	]*-[ 	]*spec\\(.*\\([^.]\\|\\(%.+\\)\\)[\n]\\)*[^.]+\\(\\.\\.+[^.]+\\)*\\.[	 ]*\\(%.+\\)*$\\)")
-  ;;(setq comment-end-skip "\\.")
-  (font-lock-add-keywords nil '(("\\(^[ 	]*-[ 	]*spec\\([^.]*\\(%.*\\)*[\n]\\)*[^.]*\.\\)" 0 font-lock-comment-face t)) t)
-  ;;(font-lock-add-keywords nil '(("\\(^[ 	]*-[ 	]*spec\\(.*\\([^.]\\|\\(%.+\\)\\)[\n]\\)*[^.]+\\(\\.\\.+[^.]+\\)*\\.[	 ]*\\(%.+\\)*$\\)" 0 font-lock-comment-face t)) t)
-  ;;(font-lock-add-keywords nil '(("\\(^[ 	]*-[ 	]*spec\\(.*\\([^.]\\|\\(%.+\\)\\)[\n]\\)*[^.]+\\(\\.\\.+[^.]+\\)*.\\)" 0 font-lock-comment-face t)) t)
-  ;;(font-lock-add-keywords nil '(
-  ;;                              ("^[ 	]*-[ 	]*spec[^.]*\\(\\(\\.\\.+[^.]+\\)*\\(%.+[\n].*\\)*\\)*\\.\\(%.*\\)*$" 0 font-lock-comment-face t)
-  ;;                              ("^[ 	]*-[ 	]*spec[^\n]+\\.[	 ]*\\(%.*\\)*$" 0 font-lock-comment-face t)
-
-  ;;                              t)
-  ;;                        )
-  (font-lock-add-keywords nil '(("^[ 	]*-[ 	]*spec.+\\.[	 ]*\\(%.*\\)?$" 0 font-lock-comment-face t)
-;;"^[ 	]*-[ 	]*spec.*\n\\(\\(^[^.%\n]+$\\)\\|\\(^.+[^.%\n 	][	 ]*\\(%.*\\)?$\\)\n\\)*"
-                                ("^[ 	]*-[ 	]*spec[^.]*\\(\\(\\.\\.+[^.]+\\)?\\(%.+[\n].*\\)?\\)*\\.\\(%.*\\)?$" 0 font-lock-comment-face t)
-
-                                ;;("^[ 	]*-[ 	]*spec[^.]*\\(\\(\\.\\.+[^.]+\\)*\\(%.+[\n].*\\)*\\)*\\.\\(%.*\\)*$" 0 font-lock-comment-face t)
-) t)
+  (font-lock-add-keywords nil '((my-spec-font-lock-matcher 0 font-lock-comment-face t)) t)
   )
 
 (defun erlang-electric-check-buffer-size ()
@@ -750,7 +691,7 @@ editing control characters:
                    inputname
                  pipe))
          (to_erl_name (make-process-buffer-name name)))
-    (if (get-process name)
+    (if (process-live-p (get-process name))
         (switch-to-buffer to_erl_name)
       (if is-tbox
           (tbox-make-comint name "erl" is-ncb)
@@ -876,7 +817,7 @@ editing control characters:
   (interactive)
   (let* ((name "gsh")
          (proc-name (make-process-buffer-name name)))
-    (if (get-process name)
+    (if (process-live-p (get-process name))
         (switch-to-buffer proc-name)
       (if (file-readable-p "/tmp/erlang.pipe.1.r")
           (make-comint name "gsh")
@@ -897,7 +838,7 @@ editing control characters:
   (interactive)
   (let* ((name "yang")
          (yang-buffer-name (make-process-buffer-name name)))
-    (if (get-process name)
+    (if (process-live-p (get-process name))
         (switch-to-buffer yang-buffer-name)
       (if (get-buffer yang-buffer-name)
           (kill-buffer yang-buffer-name))
