@@ -71,13 +71,13 @@
       (if an-ediff-buffer
           (funcall callback an-ediff-buffer)))))
 
-(add-hook 'ediff-before-setup-hook
-          '(lambda ()
-             (if (ediff-same-file-contents file-A file-B)
-                 (error "No diff")
-               (if (not (get-register ?e))
-                   (frameset-to-register ?e))
-               )))
+(defun my-ediff-before-setup-hook ()
+  (my-ediff-check-no-diff)
+  (if (not (get-register ?e))
+      (frameset-to-register ?e))
+  )
+
+(add-hook 'ediff-before-setup-hook 'my-ediff-before-setup-hook t)
 
 (add-hook 'ediff-prepare-buffer-hook
           '(lambda()
@@ -89,9 +89,22 @@
              (setq show-trailing-whitespace (not ediff-ignore-similar-regions))
              ))
 
+(defadvice ediff-setup
+    (before my-ediff-setup-advice (buffer-A file-A buffer-B file-B buffer-C file-C
+			                    startup-hooks setup-parameters
+			                    &optional merge-buffer-file))
+  "Advice function for `ediff-setup' to quit if no diff.
+Old way no longer works for Emacs 27"
+  (if (ediff-same-file-contents (ediff-convert-standard-filename (expand-file-name file-A))
+                                (ediff-convert-standard-filename (expand-file-name file-B)))
+      (error "No diff")))
+
+(if (> emacs-major-version 26)
+    (ad-activate 'ediff-setup))
+
 (defadvice ediff-toggle-skip-similar
   (after my-ediff-toggle-show-trailing ())
-  "Advice function for `ediff-toggle-skip-similar' to let 
+  "Advice function for `ediff-toggle-skip-similar' to let
 `show-trailing-whitespace' follow its settings."
   (let ((skip-spaces ediff-ignore-similar-regions))
     (foreach-ediff-buffer
@@ -108,12 +121,19 @@ If the second optional argument, a character, is given, use it to
 determine the target buffer."
   (interactive "P")
   (let* ((org-buffer (buffer-name))
-         (ediff-buffer (ediff-get-buffer (ediff-char-to-buftype (or key (ediff-last-command-char)))))
+         (ediff-buffer (my-determine-ediff-buffer key))
          (org-quit-cmd (progn (pop-to-buffer ediff-buffer) (key-binding [(control g)] t)))
          )
     (local-set-key "\C-g" (lambda() (interactive) (local-set-key "\C-g" org-quit-cmd) (exit-recursive-edit)))
     (recursive-edit)
     (pop-to-buffer org-buffer)))
+
+(defun my-determine-ediff-buffer (key)
+  (let ((char (or key
+                  (if (> emacs-major-version 26)
+                      last-command-event
+                    (ediff-last-command-char)))))
+    (ediff-get-buffer (ediff-char-to-buftype char))))
 
 (defun my-ediff-ipa-insert  (arg &optional key)
   "`ipa-insert' during Ediff.
@@ -121,7 +141,7 @@ If the second optional argument, a character, is given, use it to
 determine the target buffer."
   (interactive "P")
   (let* ((org-buffer (buffer-name))
-         (ediff-buffer (ediff-get-buffer (ediff-char-to-buftype (or key (ediff-last-command-char)))))
+         (ediff-buffer (my-determine-ediff-buffer key))
          (org-return-cmd (progn (pop-to-buffer ediff-buffer) (key-binding [return] t)))
          (org-c-return-cmd (key-binding [C-return] t))
          (org-del-cmd (key-binding [delete] t))
@@ -147,7 +167,7 @@ If the second optional argument, a character, is given, use it to
 determine the target buffer."
   (interactive "P")
   (let* ((org-buffer (buffer-name)))
-    (pop-to-buffer (ediff-get-buffer (ediff-char-to-buftype (or key (ediff-last-command-char)))))
+    (pop-to-buffer (my-determine-ediff-buffer key))
     (ipa-previous)
     (pop-to-buffer org-buffer)))
 
@@ -157,10 +177,21 @@ If the second optional argument, a character, is given, use it to
 determine the target buffer."
   (interactive "P")
   (let* ((org-buffer (buffer-name)))
-    (pop-to-buffer (ediff-get-buffer (ediff-char-to-buftype (or key (ediff-last-command-char)))))
+    (pop-to-buffer (my-determine-ediff-buffer key))
     (ipa-next)
     (pop-to-buffer org-buffer)))
 
+(defun my-ediff-check-no-diff ()
+  (let ((file-a (if (boundp 'file-A)
+                    file-A
+                  (and ediff-buffer-A buffer-file-name ediff-buffer-A)))
+        (file-b (if (boundp 'file-B)
+                    file-B
+                  (and ediff-buffer-B (buffer-file-name ediff-buffer-B))))
+        )
+    (when (and file-a file-b)
+      (if (ediff-same-file-contents file-a file-b)
+          (error "No diff")))))
 
 (defun my-ediff-startup-hook ()
   (if (< emacs-major-version 21)
