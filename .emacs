@@ -539,7 +539,8 @@ On attempt to pass beginning of prompt, stop and signal error."
 
 
 (defun my-deactivate-mark-hook ()
-"Resets movement-keys to `my-comint-mode-hook' when de-selecting text in `comint-mode'"
+"Resets movement-keys to `my-comint-mode-hook' when de-selecting text in
+`comint-mode'"
   (interactive)
   (cond ( my-comint-mode
           (local-set-key [up]   'comint-previous-matching-input-from-input)
@@ -719,6 +720,11 @@ On attempt to pass beginning of prompt, stop and signal error."
     (while (re-search-forward (concat "^.*" what ".*\n") nil t)
       (replace-match ""))))
 
+(defun my-string-match (regexp data num)
+  (interactive)
+  (string-match regexp data)
+  (match-string num data))
+
 ;; Host specific section
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -760,18 +766,32 @@ On attempt to pass beginning of prompt, stop and signal error."
     )
 )
 
+(defun get-erlang-emacs-dir (root)
+  (if (> emacs-major-version 27)
+      (setq root (ensure-otp-24 root)))
+
+  (if (file-readable-p (concat root "/lib/tools-0/emacs"))
+      (concat root "/lib/tools-0/emacs")
+    (shell-command-to-string (concat "find " root " -type d -name emacs -print0 | xargs --null echo -n"))))
+
+(defun ensure-otp-24 (root)
+  (let ((otp-version
+         (my-string-match ".*otp/\\([0-9]+\\)" "/proj/sgsn-tools/wh/tools/RHE64-7.9/otp/23.3.4.12" 1))
+        (otp-root (replace-regexp-in-string "/[0-9.]+$" "" root)))
+    (if (string-greaterp otp-version "23")
+        root
+      (shell-command-to-string (concat "echo -n `find " otp-root " -maxdepth 1 -type d -name '24*' |sort -r | head -1`")))
+    ))
+
+
 (cond ( (is-unix)
         (let* ((erl-bin-dir (get-erlang-bin-dir)))
           (cond ((string-match "[^/]*\\(.+\\)/bin/erl" erl-bin-dir)
                  (setq erlang-root-dir (match-string 1 erl-bin-dir))
                  (setq exec-path (cons (concat erlang-root-dir "/bin") exec-path))
-                 (if (file-readable-p (concat erlang-root-dir "/lib/tools-0/emacs"))
-                     (setq load-path (append (list (concat erlang-root-dir "/lib/tools-0/emacs"))
-                                             load-path))
-                   (setq load-path (append
-                                    (list
-                                     (shell-command-to-string (concat "find " erlang-root-dir " -type d -name emacs -print0 | xargs --null echo -n")))
-                                    load-path))))))
+                 (setq load-path
+                       (append (list (get-erlang-emacs-dir erlang-root-dir))
+                               load-path)))))
 
         )
 
@@ -984,11 +1004,6 @@ On attempt to pass beginning of prompt, stop and signal error."
     (goto-char (point-min))
     (if (> linenum 0)
         (forward-line (1- linenum)))))
-
-(defun my-string-match (regexp data num)
-  (interactive)
-  (string-match regexp data)
-  (match-string num data))
 
 (defun make-wiki-entry ()
   (interactive)

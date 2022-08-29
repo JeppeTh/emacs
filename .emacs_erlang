@@ -297,7 +297,7 @@ permanently the indentation in Erlang mode would be incorrect."
 (defun my-spec-font-lock-matcher (limit)
   (re-search-forward my-erlang-spec-regexp limit t))
 
-(defvar my-erlang-spec-regexp "^[ 	]*-spec\\(.+
+(defvar my-erlang-spec-regexp "^[ 	]*-spec\\(.*
 \\)*? [^%
 ]+?\\.[ 	]*\\(%.*?\\)?$")
 (defvar my-erlang-spec-start-regexp "^[ 	]*-spec")

@@ -1,4 +1,4 @@
-(add-hook 'find-file-hooks 'my-git-hook t)
+(add-hook 'find-file-hook 'my-git-hook t)
 (add-hook 'dired-after-readin-hook 'my-git-hook t)
 
 (defun my-set-default-magit-log-arguments (extra)
@@ -13,6 +13,7 @@
 ;; Magit settings
 (cond ( (require 'magit nil t)
 
+        (require 'magit-blame)
         (require 'magit-ediff)
 
         ;; Uncertain if this is needed, but at some points commit editor etc ended up in wrong emacs(-server).
@@ -33,6 +34,7 @@
                                                   (local-set-key [(control return)] 'my-git-show-commit-at-point)
                                                   (local-set-key "\C-c " 'my-git-show-child-commit)
                                                   ))
+        (add-hook 'magit-blame-mode-hook 'my-git-blame-check-reload t)
         (global-set-key "\C-xvs" 'magit-status)
         (if (functionp 'magit-status-quick)
             (global-set-key "\C-xvs" 'magit-status-quick))
@@ -264,7 +266,8 @@
       file)))
 
 (defun my-git-get-filename-for-rev (file rev &optional current-rev)
-  "Tries to determine the name of the file in the specific rev (to handle renames...)."
+  "Tries to determine the name of the file in the specific rev
+(to handle renames...)."
   (let* ((current-rev (if current-rev current-rev "HEAD"))
          (file (file-relative-name file (magit-toplevel)))
          (file (if (member file (magit-revision-files rev))
@@ -349,6 +352,16 @@
   (if (functionp 'magit-blame-chunk-get)
       (magit-blame-chunk-get :previous-hash)
     (oref (magit-current-blame-chunk) prev-rev)))
+
+(defun my-git-blame-check-reload ()
+  "In emacs 28 it seems the oref above needs to be reloaded after
+blame mode..."
+  (condition-case err
+      (my-git-blame-get-commit)
+    (error
+     ;; Why is load-file needed?
+     (load-file "~/.emacs_git")
+     (message ".emacs_git reloaded"))))
 
 (defun my-git-blame-open-prior-version ()
   "Open \"blame\" prior version of current-buffer."

@@ -45,6 +45,7 @@
       (define-key minibuffer-local-map [tab] 'completion-at-point)
       ;; process-kill-without-query has been renamed
       (defalias 'set-process-query-on-exit-flag 'process-kill-without-query)
+      (defvaralias 'find-file-hook 'find-file-hooks)
       (defalias 'with-no-warnings 'progn)
       (if (fboundp 'defvaralias)
           (defvaralias 'imenu-use-popup-menu 'imenu-always-use-completion-buffer-p))
