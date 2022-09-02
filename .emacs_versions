@@ -1,18 +1,21 @@
 ;; Some version related issues
 
-(if (not (functionp 'turn-off-auto-fill))
-    (progn
-      (defun turn-on-auto-fill ()
-        "Unconditionally turn on Auto Fill mode."
-        (auto-fill-mode 1))
+(when (not (functionp 'turn-off-auto-fill))
+  (defun turn-on-auto-fill ()
+    "Unconditionally turn on Auto Fill mode."
+    (auto-fill-mode 1))
 
-      (defun turn-off-auto-fill ()
-        "Unconditionally turn off Auto Fill mode."
-        (auto-fill-mode -1))
-      ))
+  (defun turn-off-auto-fill ()
+    "Unconditionally turn off Auto Fill mode."
+    (auto-fill-mode -1))
+  )
 
 (if (not (functionp 'completion-at-point))
     (defalias 'completion-at-point 'comint-dynamic-complete))
+
+(when (not (functionp 'convert-standard-filename))
+  (require 'ediff)
+  (defalias 'convert-standard-filename 'ediff-convert-standard-filename))
 
 (require 'compile)
 (defun my-compilation-start (COMMAND ERROR-MESSAGE NAME-FUNCTION &optional MODE)
@@ -20,86 +23,80 @@
       (compilation-start COMMAND MODE NAME-FUNCTION)
     (compile-internal COMMAND ERROR-MESSAGE MODE nil nil NAME-FUNCTION)))
 
-(if (< emacs-major-version 24)
-    (progn
-      ;;;; which-function-mode  has been renamed
-      ;;(defalias 'which-function-mode 'which-func-mode)
-      (defalias 'frameset-to-register 'frame-configuration-to-register)
-      )
+(when (< emacs-major-version 24)
+  ;; which-function-mode  has been renamed
+  ;;(defalias 'which-function-mode 'which-func-mode)
+  (defalias 'frameset-to-register 'frame-configuration-to-register)
   )
 
-(if (< emacs-major-version 23)
-    (progn
-      (defalias 'read-shell-command 'my-read-shell-command)
-      ;; browse-url-lynx-emacs has been renamed
-      (defalias 'browse-url-text-emacs 'browse-url-lynx-emacs)
-      ;; interactive-p has been renamed
-      (defalias 'called-interactively-p 'interactive-p)
-      (defalias 'lazy-highlight 'isearch-lazy-highlight-face)
-      ))
+(when (< emacs-major-version 23)
+  (defalias 'read-shell-command 'my-read-shell-command)
+  ;; browse-url-lynx-emacs has been renamed
+  (defalias 'browse-url-text-emacs 'browse-url-lynx-emacs)
+  ;; interactive-p has been renamed
+  (defalias 'called-interactively-p 'interactive-p)
+  (defalias 'lazy-highlight 'isearch-lazy-highlight-face)
+  )
 
-(if (< emacs-major-version 22)
-    (progn
-      ;; Complete filenames in e.g. Shell Mode Command. Fix futher down doesn't
-      ;; seem  to work for < 22
-      (define-key minibuffer-local-map [tab] 'completion-at-point)
-      ;; process-kill-without-query has been renamed
-      (defalias 'set-process-query-on-exit-flag 'process-kill-without-query)
-      (defvaralias 'find-file-hook 'find-file-hooks)
-      (defalias 'with-no-warnings 'progn)
-      (if (fboundp 'defvaralias)
-          (defvaralias 'imenu-use-popup-menu 'imenu-always-use-completion-buffer-p))
-      ))
+(when (< emacs-major-version 22)
+  ;; Complete filenames in e.g. Shell Mode Command. Fix futher down doesn't
+  ;; seem  to work for < 22
+  (define-key minibuffer-local-map [tab] 'completion-at-point)
+  ;; process-kill-without-query has been renamed
+  (defalias 'set-process-query-on-exit-flag 'process-kill-without-query)
+  (defvaralias 'find-file-hook 'find-file-hooks)
+  (defalias 'with-no-warnings 'progn)
+  (if (fboundp 'defvaralias)
+      (defvaralias 'imenu-use-popup-menu 'imenu-always-use-completion-buffer-p))
+  )
+
 (if (< emacs-major-version 21)
     (with-no-warnings
       ;; Automatically resize minibuffer - always enabled from emacs 21.
       (resize-minibuffer-mode 1)))
-(if (> emacs-major-version 20)
-    (progn
-      (setq-default display-buffer-reuse-frames t)
-      (setq-default eval-expression-debug-on-error nil)))
-(if (> emacs-major-version 22)
-    (progn
-      (setq-default split-width-threshold nil)
-      (setq-default large-file-warning-threshold nil)
-      (setq-default imenu-eager-completion-buffer t)
-    )
-)
+(when (> emacs-major-version 20)
+  (setq-default display-buffer-reuse-frames t)
+  (setq-default eval-expression-debug-on-error nil))
 
-(if (> emacs-major-version 23)
-    (progn
-      (defvar directory-sep-char 92 "Parameter removed in emacs 24")
+(when (> emacs-major-version 22)
+  (setq-default split-width-threshold nil)
+  (setq-default large-file-warning-threshold nil)
+  (setq-default imenu-eager-completion-buffer t)
+  )
 
-      (if (and (= emacs-major-version 24) (< emacs-minor-version 4))
-          (defalias 'frameset-to-register 'frame-configuration-to-register))
+(when (> emacs-major-version 23)
+  (defvar directory-sep-char 92 "Parameter removed in emacs 24")
 
-      (require 'package)
-      (setq my-packages '(package-utils
-                          ;;benchmark-init
-                          magit
-                          json-mode
-                          js2-mode
-                          org
-                          helm
-                          go-mode))
-      ;;(add-to-list 'package-archives
-      ;;             '("marmalade" . "https://marmalade-repo.org/packages/"))
-      ;;(add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/"))
-      (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/"))
-      ;; The original ELPA archive still has some useful
-      ;; stuff.
-      ;; (add-to-list 'package-archives<br />
-      ;;              '("elpa" . "http://tromey.com/elpa/"))
-      (if (< emacs-major-version 26)
-          (setq package-user-dir "~/.emacsold.d/elpa"))
-      (package-initialize)
+  (if (and (= emacs-major-version 24) (< emacs-minor-version 4))
+      (defalias 'frameset-to-register 'frame-configuration-to-register))
 
-      (defun package-install-all ()
-        (interactive)
-        (package-refresh-contents)
-        (dolist (p my-packages)
-          (unless (package-installed-p p)
-            (package-install p)))
-        ;; Reload everything
-        (load ".emacs"))
-      ))
+  (require 'package)
+  (setq my-packages '(package-utils
+                      ;;benchmark-init
+                      magit
+                      json-mode
+                      js2-mode
+                      org
+                      helm
+                      go-mode))
+  ;;(add-to-list 'package-archives
+  ;;             '("marmalade" . "https://marmalade-repo.org/packages/"))
+  ;;(add-to-list 'package-archives '("org" . "http://orgmode.org/elpa/"))
+  (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/"))
+  ;; The original ELPA archive still has some useful
+  ;; stuff.
+  ;; (add-to-list 'package-archives<br />
+  ;;              '("elpa" . "http://tromey.com/elpa/"))
+  (if (< emacs-major-version 26)
+      (setq package-user-dir "~/.emacsold.d/elpa"))
+  (package-initialize)
+
+  (defun package-install-all ()
+    (interactive)
+    (package-refresh-contents)
+    (dolist (p my-packages)
+      (unless (package-installed-p p)
+        (package-install p)))
+    ;; Reload everything
+    (load ".emacs"))
+  )

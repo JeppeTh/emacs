@@ -95,8 +95,8 @@
 			                    &optional merge-buffer-file))
   "Advice function for `ediff-setup' to quit if no diff.
 Old way no longer works for Emacs 27"
-  (if (ediff-same-file-contents (ediff-convert-standard-filename (expand-file-name file-A))
-                                (ediff-convert-standard-filename (expand-file-name file-B)))
+  (if (ediff-same-file-contents (convert-standard-filename (expand-file-name file-A))
+                                (convert-standard-filename (expand-file-name file-B)))
       (error "No diff")))
 
 (if (> emacs-major-version 26)
@@ -132,7 +132,8 @@ determine the target buffer."
   (let ((char (or key
                   (if (> emacs-major-version 26)
                       last-command-event
-                    (ediff-last-command-char)))))
+                    (with-no-warnings
+                      (ediff-last-command-char))))))
     (ediff-get-buffer (ediff-char-to-buftype char))))
 
 (defun my-ediff-ipa-insert  (arg &optional key)
@@ -429,7 +430,8 @@ cut_buffer instead of primary selection."
 
 
 (defun my-imenu--completion-buffer (index-alist &optional prompt)
-  "Redefine `imenu--completion-buffer' to make it possible to jump to an index, which is defined in an imenu sub list"
+  "Redefine `imenu--completion-buffer' to make it possible to jump to
+an index, which is defined in an imenu sub list"
 
   ;;;;;;;;;;;;;;;;;;;;;;;;; NO CHANGES ;;;;;;;;;;;;;;;;;;;;;;;
   ;; Create a list for this buffer only when needed.

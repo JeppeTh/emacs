@@ -776,13 +776,12 @@ On attempt to pass beginning of prompt, stop and signal error."
 
 (defun ensure-otp-24 (root)
   (let ((otp-version
-         (my-string-match ".*otp/\\([0-9]+\\)" "/proj/sgsn-tools/wh/tools/RHE64-7.9/otp/23.3.4.12" 1))
-        (otp-root (replace-regexp-in-string "/[0-9.]+$" "" root)))
+         (my-string-match ".*\\(otp/\\|otp_\\)\\([0-9]+\\)" root 2))
+        (otp-root (replace-regexp-in-string "/\\(otp_\\)?[0-9.]+$" "" root)))
     (if (string-greaterp otp-version "23")
         root
-      (shell-command-to-string (concat "echo -n `find " otp-root " -maxdepth 1 -type d -name '24*' |sort -r | head -1`")))
+      (shell-command-to-string (concat "echo -n `find " otp-root " -maxdepth 1 -xtype d -name '24*' |sort -r | head -1`")))
     ))
-
 
 (cond ( (is-unix)
         (let* ((erl-bin-dir (get-erlang-bin-dir)))

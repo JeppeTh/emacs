@@ -361,7 +361,8 @@
   (find-file (concat (clearcase-vxpath-element-part (get-pname)) "@@" version)))
 
 (defun ccase-find-alternate-version (version)
-  "Kills current buffer and switch to a buffer visiting an other version of current buffer."
+  "Kills current buffer and switch to a buffer visiting an other version of
+current buffer."
   (interactive (list (ccase-get-version "Find alternate version: ")))
   (find-alternate-file (concat (clearcase-vxpath-element-part (get-pname)) "@@" version)))
 
@@ -547,7 +548,8 @@ for directories, and not just files."
           (insert (concat (nth 0 param) ": \t" (nth 1 param) "\n"))))))
 
 (defun ct-find-original-version (data &optional inputfile escaped)
-  "Finds the oldest clearcase version of current element where given strings is found."
+  "Finds the oldest clearcase version of current element where given strings is
+found."
   (interactive "sUnique String: ")
   (let* (;;(data (if escaped data (my-escape data)))
          (debug-buffer (initialize-ct-find-debug-buffer "*ct-find-original-version*" data (not escaped)))
@@ -581,7 +583,8 @@ for directories, and not just files."
       )))
 
 (defun ct-find-removed-version (data &optional inputfile escaped)
-  "Finds the first clearcase version of current element where given strings is removed."
+  "Finds the first clearcase version of current element where given strings is
+removed."
   (interactive "sUnique String: ")
   (let* (
          (file (clearcase-vxpath-version-extend (if inputfile inputfile (get-pname))))
@@ -598,7 +601,8 @@ for directories, and not just files."
     ))
 
 (defun ct-grep-for-first-version (data &optional inputfile debug-buffer)
-  "Finds the oldest clearcase version of current element where given strings is found, by using grep."
+  "Finds the oldest clearcase version of current element where given strings is
+found, by using grep."
   (interactive)
   (let* ((file (if inputfile inputfile (get-pname)))
          (element (clearcase-vxpath-element-part file))
@@ -642,7 +646,8 @@ for directories, and not just files."
 ))
 
 (defun ct-grep-for-last-version (data &optional inputfile pred-file)
-  "Finds the oldest clearcase version of current element where given strings is found, by using grep."
+  "Finds the oldest clearcase version of current element where given strings is
+found, by using grep."
   (interactive)
   (let* ((file (if inputfile inputfile (get-pname)))
          (element (clearcase-vxpath-element-part file))
@@ -683,7 +688,8 @@ for directories, and not just files."
     ))
 
 (defun make-shorter-version-regexp (element version-length)
-  "Help fun used by `ct-grep-for-first-version' to make a clearcase version regexp, with one digit shorter."
+  "Help fun used by `ct-grep-for-first-version' to make a clearcase version
+regexp, with one digit shorter."
   (interactive)
   (let ((version-string [])
         (index 1))

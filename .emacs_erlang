@@ -120,9 +120,10 @@ for completion since a backspace then must also be sent to the shell."
            indent))))
 
 (defun my-erlang-find-tag-default ()
-  "Like `find-tag-default' but temporary changes the syntax for some charcaters to be able to get
-the correct default tag e.g. 'Mvrasn-11-6':decode. If changing this syntax
-permanently the indentation in Erlang mode would be incorrect."
+  "Like `find-tag-default' but temporary changes the syntax for some charcaters
+to be able to get the correct default tag e.g. 'Mvrasn-11-6':decode. If
+changing this syntax permanently the indentation in Erlang mode would be
+incorrect."
   (save-excursion
     (modify-syntax-entry ?' "_")
     (modify-syntax-entry ?- "_")
@@ -396,7 +397,8 @@ case buffer is too big"
     nil))
 
 (defun my-compile-goto-error ()
-  "In case looking at compilation error, follow compilation-error, otherwise \"normal\" return"
+  "In case looking at compilation error, follow compilation-error, otherwise
+\"normal\" return"
   (interactive)
     (condition-case nil
         (save-excursion
