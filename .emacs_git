@@ -20,6 +20,9 @@
         (if (is-unix)
             (setq server-name (format "server%s" (emacs-pid))))
 
+        ;; Seems magit-ediff-resolve has been renamed to magit-ediff-resolve-rest
+        (if (not (functionp 'magit-ediff-resolve-rest))
+            (defalias 'magit-ediff-resolve-rest 'magit-ediff-resolve))
         (magit-auto-revert-mode -1)
         (my-set-default-magit-log-arguments (list "--no-merges" "--follow"))
         (set-face-foreground 'magit-blame-heading "lightgrey")
@@ -105,7 +108,7 @@
   (local-set-key  "e"      'my-git-ediff-pred-at-point)
   (local-set-key  "\C-d"   'my-git-ediff-pred-at-point)
   (local-set-key  "\e\C-d" 'my-git-ediff-other-version-at-point)
-  (local-set-key  "\C-e"   'magit-ediff-resolve)
+  (local-set-key  "\C-e"   'magit-ediff-resolve-rest)
   )
 
 (defadvice magit-insert-unpushed-to-upstream-or-recent
