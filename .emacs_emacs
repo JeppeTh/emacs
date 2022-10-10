@@ -81,10 +81,7 @@
 
 (add-hook 'ediff-prepare-buffer-hook
           '(lambda()
-             (my-git-fix-messed-up-modtime)
-             ;; Check if buffer needs revert,
-             (if (not (verify-visited-file-modtime (current-buffer)))
-                 (revert-buffer))
+             (revert-buffer-if-needed)
              ;; Determine how to display trailing ws,
              (setq show-trailing-whitespace (not ediff-ignore-similar-regions))
              ))

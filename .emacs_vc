@@ -18,6 +18,9 @@
 (setq-default file-checkedout nil)
 (setq-default mode-line-buffer-identification '(file-checkedout "%b:CHECKEDOUT" "%b"))
 (autoload 'my-git-fix-messed-up-modtime ".emacs_git" nil 1)
+(autoload 'my-git-list-changed-files ".emacs_git" nil 1)
+(autoload 'my-git-diff ".emacs_git" nil 1)
+(autoload 'magit-status ".emacs_git" nil 1)
 
 (defun my-autoload-git ()
   (interactive)

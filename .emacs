@@ -973,6 +973,12 @@ On attempt to pass beginning of prompt, stop and signal error."
         (my-fix-long-name my-buffer-name)
       (buffer-name))))
 
+(defun revert-buffer-if-needed ()
+  (my-git-fix-messed-up-modtime)
+  ;; Check if buffer needs revert,
+  (if (not (verify-visited-file-modtime (current-buffer)))
+      (revert-buffer)))
+
 ;; Load emacs or Xemacs specific definitions
 (if (is-xemacs)
     (load ".xemacs")

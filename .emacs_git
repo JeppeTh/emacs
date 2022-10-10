@@ -90,12 +90,15 @@
 
 (defun my-git-ediff-pred-at-point ()
   (interactive)
-  (let* ((file-at-point (my-git-file-at-point))
-         (buffer-at-point (get-file-buffer file-at-point)))
-    ;;(if (and buffer-at-point (not (verify-visited-file-modtime buffer-at-point)))
-    ;;    (with-current-buffer buffer-at-point
-    ;;      (revert-buffer)))
-    (magit-ediff-show-working-tree file-at-point)))
+  (my-git-revert-buffer-at-point-if-needed)
+  (magit-ediff-show-working-tree (my-git-file-at-point)))
+
+(defun my-git-revert-buffer-at-point-if-needed ()
+  (interactive)
+  (let* ((buffer-at-point (get-file-buffer (my-git-file-at-point))))
+    (if buffer-at-point
+        (with-current-buffer buffer-at-point
+          (revert-buffer-if-needed)))))
 
 (defun my-magit-log (revs args)
   "Wrapper of magit log function which differs depending on magit versions."
@@ -182,9 +185,11 @@
                          (interactive)
                          (if (magit-branch-or-commit-at-point)
                              (magit-ediff-dwim)
+                           (my-git-revert-buffer-at-point-if-needed)
                            (magit-ediff-compare (car (magit-split-range my-git-diff-target)) nil (ffap-string-at-point) (ffap-string-at-point)))))
     (local-set-key [S-return] 'my-find-file-at-point)
     (local-set-key [C-return] 'my-find-file-at-point)
+    (local-set-key [return]   'my-find-file-at-point)
     (local-set-key "k"        'kill-all-matching-lines)
     ))
 
