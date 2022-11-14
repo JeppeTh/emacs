@@ -766,17 +766,22 @@ On attempt to pass beginning of prompt, stop and signal error."
     )
 )
 
-(defun get-erlang-emacs-dir (root)
-  (if (> emacs-major-version 27)
-      (setq root (ensure-otp-24 root)))
+(defun get-erlang-emacs-dir (&optional root)
+  (if (not root)
+      (get-erlang-emacs-dir erlang-root-dir)
 
-  (if (file-readable-p (concat root "/lib/tools-0/emacs"))
-      (concat root "/lib/tools-0/emacs")
-    (shell-command-to-string (concat "find " root " -type d -name emacs -print0 | xargs --null echo -n"))))
+    (if (> emacs-major-version 27)
+        (setq root (ensure-otp-24 root)))
+
+    (if (file-readable-p (concat root "/lib/tools-0/emacs"))
+        (concat root "/lib/tools-0/emacs")
+      (shell-command-to-string (concat "find " root " -type d -name emacs -print0 | xargs --null echo -n")))))
+
+(defun get-otp-version (dir)
+  (my-string-match ".*\\(otp/\\|otp_\\)\\([0-9]+\\)" dir 2))
 
 (defun ensure-otp-24 (root)
-  (let ((otp-version
-         (my-string-match ".*\\(otp/\\|otp_\\)\\([0-9]+\\)" root 2))
+  (let ((otp-version (get-otp-version root))
         (otp-root (replace-regexp-in-string "/\\(otp_\\)?[0-9.]+$" "" root)))
     (if (string-greaterp otp-version "23")
         root

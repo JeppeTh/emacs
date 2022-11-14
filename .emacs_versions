@@ -13,6 +13,15 @@
 (if (not (functionp 'completion-at-point))
     (defalias 'completion-at-point 'comint-dynamic-complete))
 
+(defun my-string-greaterp (STRING1 STRING2)
+  (interactive)
+  (if (string-equal STRING1 STRING2)
+      nil
+    (not (string-lessp STRING1 STRING2))))
+
+(if (not (functionp 'string-greaterp))
+    (defalias 'string-greaterp 'my-string-greaterp))
+
 (when (not (functionp 'convert-standard-filename))
   (require 'ediff)
   (defalias 'convert-standard-filename 'ediff-convert-standard-filename))

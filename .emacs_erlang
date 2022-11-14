@@ -736,6 +736,14 @@ editing control characters:
       (setq term-scroll-with-delete nil)))
 (ad-activate 'term-set-scroll-region)
 
+(defadvice erlang-mode
+  (after erlang-mode-run-hooks ())
+  "Fix so that `erlang-mode-hook' always is run in erlang-mode"
+  (run-hooks 'erlang-mode-hook))
+
+(if (string-greaterp (get-otp-version (get-erlang-emacs-dir)) "23")
+    (ad-activate 'erlang-mode))
+
 ;; Strip surrounding space from input
 (defun my-strip-input (&rest r)
   (let* ((r (car r))
