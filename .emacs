@@ -897,7 +897,7 @@ On attempt to pass beginning of prompt, stop and signal error."
             (find-file-other-window name)
           (if (and version (file-readable-p name-no-version))
               (magit-find-file-other-window version name-no-version)
-            (message name " not readable"))))
+            (message (concat name " not readable")))))
     (message (concat (ffap-string-at-point) " not found")))
   )
 

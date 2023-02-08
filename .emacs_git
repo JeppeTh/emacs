@@ -16,6 +16,8 @@
         (require 'magit-blame)
         (require 'magit-ediff)
 
+        (setq-default magit-commit-show-diff nil)
+
         ;; Uncertain if this is needed, but at some points commit editor etc ended up in wrong emacs(-server).
         (if (is-unix)
             (setq server-name (format "server%s" (emacs-pid))))
@@ -79,6 +81,11 @@
          (file-at-point (if (not file-at-point) (ffap-string-at-point) file-at-point)))
     file-at-point))
 
+(defun my-git-file-at-point-no-rev ()
+  "As `my-git-file-at-point', but strips the revision if present."
+  (interactive)
+  (replace-regexp-in-string "@@.*$" "" (my-git-file-at-point)))
+
 (defun my-git-show-commit-at-point ()
   (interactive)
   (magit-show-commit (magit-commit-at-point)))
@@ -137,7 +144,8 @@
       magit-log-arguments
     (get 'magit-log-mode 'magit-log-default-arguments)))
 
-(defvar my-git-diff-target nil "Diff target in \"git-diff buffers\"")
+(defvar my-git-diff-other-target nil "Diff target (other) in \"git-diff buffers\"")
+(defvar my-git-diff-this-target nil "Diff target (this) in \"git-diff buffers\"")
 (defun my-git-list-changed-files ()
   (interactive)
   (my-git-diff "git-changes" t))
@@ -145,9 +153,15 @@
 (defun my-git-diff (&optional diff-name baseline-diff)
   (interactive)
   (let* ((other-target (magit-read-branch-or-commit "Compare with:" "origin/master"))
-         (other-target (if baseline-diff 
+         (other-target (if baseline-diff
                            (replace-regexp-in-string "\\.+$" "" other-target)
                          other-target))
+         (this-target (if (string-match "[^.]\\.+[^.]" other-target)
+                          (cdr (magit-split-range other-target))))
+         (this-rev  (if this-target
+                        (concat "@@" this-target)
+                      ""
+                      ))
          (diff-name (if (not diff-name) "git-diff" diff-name))
          (afterdate (if baseline-diff
                         (shell-command-to-string (concat "git log -1 `git merge-base " other-target " HEAD` --format=\"%cd\""))))
@@ -173,11 +187,12 @@
     (read-only-mode -1)
     ;;(setq buffer-read-only nil)
     (insert "\n\n")
-    (insert (mapconcat 'identity (magit-changed-files diff-target) "\n"))
+    (insert (mapconcat (lambda (name) (concat name this-rev)) (magit-changed-files diff-target) "\n"))
     (cd (magit-toplevel))
     (switch-to-buffer diff-name)
     (goto-char (point-min))
-    (set (make-local-variable 'my-git-diff-target) diff-target)
+    (set (make-local-variable 'my-git-diff-other-target) diff-target)
+    (set (make-local-variable 'my-git-diff-this-target) this-target)
     ;; local-set-key is tricky - it's not local buffer - it's local key-map
     ;;(use-local-map (copy-keymap local-function-key-map))
     (use-local-map (copy-keymap (current-local-map)))
@@ -186,7 +201,11 @@
                          (if (magit-branch-or-commit-at-point)
                              (magit-ediff-dwim)
                            (my-git-revert-buffer-at-point-if-needed)
-                           (magit-ediff-compare (car (magit-split-range my-git-diff-target)) nil (ffap-string-at-point) (ffap-string-at-point)))))
+                           (magit-ediff-compare (car (magit-split-range my-git-diff-other-target))
+                                                my-git-diff-this-target
+                                                (my-git-file-at-point-no-rev)
+                                                (my-git-file-at-point-no-rev)
+                                                ))))
     (local-set-key [S-return] 'my-find-file-at-point)
     (local-set-key [C-return] 'my-find-file-at-point)
     (local-set-key [return]   'my-find-file-at-point)

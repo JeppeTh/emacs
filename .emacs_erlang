@@ -481,7 +481,6 @@ editing control characters:
       (setq inferior-erlang-shell-type org-type)
       (setq inferior-erlang-machine-options org-opts))))
 
-
 (defun my-ct-run-test-case ()
   "Use bt_run to run current test case."
   (interactive)
@@ -492,7 +491,7 @@ editing control characters:
   ;; end rescan
   (let* ((org-buffer (buffer-name)))
     (if (string-match "_restricted/test/" default-directory)
-        (my-ct-run (concat "run_tests -no_build -suite " (erlang-get-module) " -testcase " (determine-tc)))
+        (my-ct-run (concat "run_tests -no_build -suite " (erlang-get-module) " -case " (determine-tc)))
       (my-ct-run (concat "bt_run -p . " (erlang-get-module) " " (determine-tc))))
     (switch-to-buffer-other-window org-buffer))
   )
@@ -501,7 +500,7 @@ editing control characters:
   "Use bt_run to run current test SUITE."
   (interactive)
   (if (string-match "_restricted/test/" default-directory)
-      (my-ct-run (concat "run_tests -no_build -suite " (erlang-get-module)))
+      (my-ct-run (concat "run_tests -c -suite " (erlang-get-module)))
     (my-ct-run (concat "bt_run -c . " (erlang-get-module))))
   (delete-other-windows)
   )
@@ -510,7 +509,7 @@ editing control characters:
   "Use bt_run to run all SUITES in current directory."
   (interactive)
   (if (string-match "_restricted/test/" default-directory)
-      (my-ct-run "run_tests -no_build")
+      (my-ct-run "run_tests -c")
     (my-ct-run "bt_run -c ."))
   (delete-other-windows)
   )
