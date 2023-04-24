@@ -189,13 +189,20 @@ incorrect."
       (progn
         ;;(if saved-erlang-man-function-name
         ;;    (Man-notify-when-ready (current-buffer)))
-        (setq imenu--index-alist nil) ;; Seems this is needed in Emacs 26
-        (setq imenu-generic-expression my-erlang-man-imenu-generic-expression)
-        (setq my-imenu-next-regexp '(concat (my-which-function) "[ 	]*("))
-
-        (local-set-key "m"      'erlang-man-function)
-        (local-set-key [return] 'my-erlang-man-follow)
+        (my-erlang-man-mode)
         )))
+
+(defun my-erlang-man-mode ()
+  (interactive)
+  (setq imenu--index-alist nil) ;; Seems this is needed in Emacs 26
+  (make-local-variable 'imenu-generic-skip-comments-and-strings)
+  (setq imenu-generic-skip-comments-and-strings nil)
+  (setq imenu-generic-expression my-erlang-man-imenu-generic-expression)
+  (setq my-imenu-next-regexp '(concat (my-which-function) "[ 	]*("))
+
+  (local-set-key "m"      'erlang-man-function)
+  (local-set-key [return] 'my-erlang-man-follow)
+  )
 
 (defvar saved-erlang-man-function-name nil)
 
@@ -240,8 +247,8 @@ incorrect."
         (if (eq (point) (point-min))
             (if (re-search-forward (concat "^[ \t]+[[:lower:]_0-9]+:" erlang-man-function-name " *(") nil t)
                 (recenter))
-          (recenter)
-          (setq erlang-man-function-name nil)))))
+          (recenter))
+        (setq erlang-man-function-name nil))))
 
 (ad-activate 'erlang-man-find-function)
 
@@ -299,7 +306,7 @@ incorrect."
   (re-search-forward my-erlang-spec-regexp limit t))
 
 (defvar my-erlang-spec-regexp "^[ 	]*-spec\\(.*
-\\)*? [^%
+\\)*?[ (]*[^%
 ]+?\\.[ 	]*\\(%.*?\\)?$")
 (defvar my-erlang-spec-start-regexp "^[ 	]*-spec")
 (defvar my-erlang-spec-end-regexp "^[^%
@@ -788,6 +795,10 @@ editing control characters:
     (cd (tecsas-dir)))
 )
 
+(defun gttpatch ()
+  (interactive)
+  (tbox-cmd-to-string "$GSN_WS_ROOT/sgsn_mme/test/imatec/src/imatec patchbeams"))
+
 (defadvice term-handle-exit
   (after term-handle-exit-fix-keys (PROCESS-NAME MSG))
   "Fix so that \"\\C-xr\" works after process exists"
@@ -822,16 +833,21 @@ editing control characters:
 
 (require 'shell)
 (require 'dabbrev)
-(defun gsh ()
+(defun gsh (&optional su)
   (interactive)
   (let* ((name "gsh")
+         (cmd (if su
+                  "su cli_rollback_user -c gsh"
+                "gsh"
+                ))
          (proc-name (make-process-buffer-name name)))
     (if (process-live-p (get-process name))
         (switch-to-buffer proc-name)
       (if (file-readable-p "/tmp/erlang.pipe.1.r")
-          (make-comint name "gsh")
+          (make-comint name cmd)
         (fix-tecsas-env)
-        (tbox-make-comint name "gsh" "ncb"))
+        (tbox-make-comint name cmd "ncb"))
+        ;;(tbox-make-comint name "su cli_rollback_user -c gsh" "ncb"))
       (switch-to-buffer proc-name)
       (if (not (file-readable-p "/tmp/erlang.pipe.1.r"))
           (add-hook 'comint-preoutput-filter-functions 'my-tbox-strip-cshrc-echos nil t))
@@ -841,6 +857,10 @@ editing control characters:
       (setq-local comint-input-ring-file-name "~/.gsh_history")
       (comint-read-input-ring)
       (setq-local comint-process-echoes t))))
+
+(defun su-gsh ()
+  (interactive)
+  (gsh t))
 
 ;; Needs special deployment....
 (defun yang ()

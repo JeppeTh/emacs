@@ -154,8 +154,23 @@
 
 (defun tbox-pod-term (pod &optional historyfile)
   (interactive)
-  (tbox-make-term pod (concat "kubectl exec -it " pod " -- tcsh"))
-  (cd (concat "/tbox-pod:" pod "@" (tbox-session) ":/")))
+  (let ((i 10))
+    (if (process-live-p (get-process pod))
+        (switch-to-buffer (make-process-buffer-name pod))
+      ;; tbox can't handle -cmd correctly - i.e. -cmd "kubectl exec ...  bash -c 'tcsh || sh'"
+      ;; So execute via tbox term
+      ;;(tbox-make-term pod (concat "kubectl exec -it " pod " -- bash -c 'tcsh || sh'"))
+      (tbox-make-term pod "tcsh" nil nil "~/.tbox_history")
+      ;; Now run kubectl command
+      (term-send-string (get-buffer-process (current-buffer))
+                        (concat "kubectl exec -it " pod " -- bash -c 'tcsh || sh'\n"))
+      ;; Wait for pod prompt
+      (while (and (> i 0) (not (string-match "#" (buffer-string))))
+        (setq i (- i 1))
+        (sleep-for 0 500))
+      (kill-all-matching-lines "tcsh")
+      (cd (concat "/tbox-pod:" pod "@" (tbox-session) ":/")))
+    ))
 
 (defvar ncb-ip "172.16.4.146")
 (defun tbox-fix-ncb ()
@@ -221,7 +236,7 @@
             (term-read-input-ring)
             ))
       ;;(setq term-prompt-regexp "^[^<>=,]*> ?")
-      (setq term-prompt-regexp "^\\([^<>=,]*> ?\\|==.+ # \\)")
+      (setq term-prompt-regexp "^\\([^<>=,]*> ?\\|\\(==.+ \\)?# \\)")
         ;;;;Don't use compilation
       ;;(make-local-variable 'inferior-erlang-use-cmm)
       ;;(setq inferior-erlang-use-cmm nil)

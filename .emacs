@@ -768,7 +768,7 @@ On attempt to pass beginning of prompt, stop and signal error."
 
 (defun get-erlang-emacs-dir (&optional root)
   (if (not root)
-      (get-erlang-emacs-dir erlang-root-dir)
+      (if erlang-root-dir (get-erlang-emacs-dir erlang-root-dir))
 
     (if (> emacs-major-version 27)
         (setq root (ensure-otp-24 root)))

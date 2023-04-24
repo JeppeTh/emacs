@@ -4,7 +4,8 @@
 (defun my-set-default-magit-log-arguments (extra)
   (if (boundp 'magit-log-arguments)
       (setq magit-log-arguments (append magit-log-arguments extra))
-    (let ((default-args (get 'magit-log-mode 'magit-log-default-arguments)))
+    (let* ((default-args (get 'magit-log-mode 'magit-log-default-arguments))
+           (default-args (delete "--graph" default-args)))
       (put 'magit-log-mode 'magit-log-default-arguments (append default-args extra))
       (put 'magit-log-select-mode 'magit-log-default-arguments (append default-args extra)))))
 
@@ -338,7 +339,7 @@
           (if (is-windows)
               (shell-command (concat "copy /Y " buffer-file-name " " buffer-file-name ".keep"))
             (shell-command (concat "\\cp --backup=numbered " buffer-file-name " " buffer-file-name ".keep")))
-          (shell-command (concat "git checkout -- " buffer-file-name) nil nil)
+          (shell-command (concat "git checkout HEAD " buffer-file-name) nil nil)
           (revert-buffer nil t)
           )))
 
