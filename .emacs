@@ -39,6 +39,7 @@
 (load ".emacs_versions")
 
 ;; Set default values
+(setq-default confirm-kill-emacs 'yes-or-no-p)
 (setq-default inhibit-default-init 1)
 (setq-default next-line-add-newlines nil)
 (setq-default mouse-yank-at-point 1)
@@ -123,6 +124,7 @@
 
 ;; Always "y" or "n" instead of "yes" or "no"
 (fset 'yes-or-no-p 'y-or-n-p)
+(if (boundp 'use-short-answers) (setq-default use-short-answers t))
 
 ;; Key Bindings
 (global-set-key   "\C-k"              'my-kill-whole-line)

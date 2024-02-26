@@ -3,11 +3,17 @@
 
 (defun my-set-default-magit-log-arguments (extra)
   (if (boundp 'magit-log-arguments)
-      (setq magit-log-arguments (append magit-log-arguments extra))
+      (setq magit-log-arguments (append-missing magit-log-arguments extra))
     (let* ((default-args (get 'magit-log-mode 'magit-log-default-arguments))
            (default-args (delete "--graph" default-args)))
-      (put 'magit-log-mode 'magit-log-default-arguments (append default-args extra))
-      (put 'magit-log-select-mode 'magit-log-default-arguments (append default-args extra)))))
+      (put 'magit-log-mode 'magit-log-default-arguments (append-missing default-args extra))
+      (put 'magit-log-select-mode 'magit-log-default-arguments (append-missing default-args extra)))))
+
+(defun append-missing (old-list new-list)
+  (let ((return old-list))
+    (dolist (elt new-list return)
+      (if (not (member elt return))
+          (setq return (append return (list elt)))))))
 
 (provide 'mygit)
 
@@ -18,6 +24,8 @@
         (require 'magit-ediff)
 
         (setq-default magit-commit-show-diff nil)
+        ;;(setq magit-process-extreme-logging t)
+        ;;(magit-toggle-git-debug)
 
         ;; Uncertain if this is needed, but at some points commit editor etc ended up in wrong emacs(-server).
         (if (is-unix)
@@ -42,6 +50,7 @@
                                                   ))
         (add-hook 'magit-blame-mode-hook 'my-git-blame-check-reload t)
         (global-set-key "\C-xvs" 'magit-status)
+        (global-set-key "\C-b" 'magit-blame-addition)
         (if (functionp 'magit-status-quick)
             (global-set-key "\C-xvs" 'magit-status-quick))
         (define-key magit-blame-mode-map "e"      'my-git-blame-ediff)
@@ -164,9 +173,9 @@
                       ""
                       ))
          (diff-name (if (not diff-name) "git-diff" diff-name))
-         (afterdate (if baseline-diff
-                        (shell-command-to-string (concat "git log -1 `git merge-base " other-target " HEAD` --format=\"%cd\""))))
-         (log-args (if afterdate (append (my-get-magit-log-arguments) (list (concat "--after=\"" afterdate "\""))) (my-get-magit-log-arguments)))
+         ;;(log-args (if baseline-diff
+         ;;              (append (my-get-magit-log-arguments) (list "--not" other-target))
+         ;;            (my-get-magit-log-arguments)))
          (diff-target (if baseline-diff
                           (concat other-target "...")
                         (if (string-match "\\." other-target)
@@ -174,11 +183,11 @@
                           (concat other-target "..")))))
     (if (get-buffer diff-name)
         (kill-buffer diff-name))
-    ;;(magit-log (list (concat baseline "..HEAD")) (append magit-log-arguments  '("--no-merges" "--ancestry-path")))
+    ;;(my-magit-log nil (append (list "--first-parent") log-args))
     (my-magit-log (list (if (string-match "\\." other-target)
                             other-target
                           (concat other-target "..")))
-                  log-args)
+                  (append (list "--first-parent") (my-get-magit-log-arguments)))
     (rename-buffer diff-name)
     ;; Avoid buffer beeing re-used for other magit commands
     (setq magit-buffer-locked-p t)
@@ -491,13 +500,17 @@ blame mode..."
 (defun git-grep (what)
     "Run git grep on what in current repo."
     (interactive (list (read-shell-command "git grep: " nil 'git-grep-history)))
-    (let ((top-dir (magit-toplevel)))
-      (my-compilation-start (concat "git grep --full-name -ni \"" what "\" \"" top-dir "\"") 
+    (let ((grep-dir (if current-prefix-arg
+                        default-directory
+                     (magit-toplevel)))
+          (full-name (if (not current-prefix-arg) "--full-name ")))
+      (my-compilation-start (concat "git grep " full-name "-ni \"" what "\" \"" grep-dir "\"")
                             nil
                             (lambda (n) "*git-grep*")
                             'grep-mode)
       (if (not (string-equal "*git-grep*" (buffer-name)))
           (switch-to-buffer-other-window "*git-grep*"))
-      (cd top-dir)
+      (if full-name
+          (cd (magit-toplevel)))
       )
 )

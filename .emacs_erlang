@@ -185,7 +185,8 @@ incorrect."
     (erlang-man-module (thing-at-point 'symbol))))
 
 (defun my-erlang-man-mode-hook ()
-  (if (and (equal mode-name "Man") erlang-man-function-name)
+  (if (or (equal mode-name "Man")
+          (string-match "Erlang Module Definition" (buffer-string)))
       (progn
         ;;(if saved-erlang-man-function-name
         ;;    (Man-notify-when-ready (current-buffer)))
@@ -241,9 +242,9 @@ incorrect."
   (after my-erlang-find-function (BUF FUNC &optional MODULE-NAME))
   "Fix so that also Mod:Fun is found by `erlang-man-find-function'
    Also trigger for  `my-erlang-man-mode-hook'"
+  (my-erlang-man-mode-hook)
   (if erlang-man-function-name
       (progn
-        (my-erlang-man-mode-hook)
         (if (eq (point) (point-min))
             (if (re-search-forward (concat "^[ \t]+[[:lower:]_0-9]+:" erlang-man-function-name " *(") nil t)
                 (recenter))
@@ -906,7 +907,7 @@ editing control characters:
 
 (defun update-tecsas-env-from-tbox ()
   (if (equal (tbox-session) tbox-container-session)
-      (setenv "tecsas" (concat "/tbox-pod:" (get-ncb-pod) "@" (tbox-session) ":/"))
+      (setenv "tecsas" (concat "/tboxpod:" (get-ncb-pod) "@" (tbox-session) ":/"))
     (setenv "tecsas" (get-tbox-installation))))
 
 (defvar my-diaspec-imenu-generic-expression

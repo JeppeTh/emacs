@@ -57,7 +57,7 @@
                (tramp-remote-shell-args  ("-i" "-c"))))
 
 (add-to-list 'tramp-methods
-             `(,"tbox-pod"
+             `(,"tboxpod"
                (tramp-login-program      ,"/proj/sgsn-tools/tbox/bin/tbox")
                (tramp-login-args
                 (,
@@ -77,7 +77,7 @@
   (cl-loop for name in (get-tbox-pods)
            collect (list ""  (concat name "@" (tbox-session)))))
 
-(tramp-set-completion-function "tbox-pod" tbox-pod-completion-function-alist)
+(tramp-set-completion-function "tboxpod" tbox-pod-completion-function-alist)
 
 (defun make-tbox-cmd-list (cmd &optional startfile)
   (list "/proj/sgsn-tools/tbox/bin/tbox" startfile "-connect" "-nox11" "-session" (tbox-session) "-q" "-cmd" cmd))
@@ -123,7 +123,7 @@
   (car (cl-member regexp (get-tbox-pods) :test #'string-match)))
 
 (defun get-ncb-pod ()
-  (get-pod "controller-[0-9]"))
+  (get-pod "eric-pc-mm-controller-"))
 
 (defun get-yang-pod ()
   (get-pod "-yang"))
@@ -169,7 +169,7 @@
         (setq i (- i 1))
         (sleep-for 0 500))
       (kill-all-matching-lines "tcsh")
-      (cd (concat "/tbox-pod:" pod "@" (tbox-session) ":/")))
+      (cd (concat "/tboxpod:" pod "@" (tbox-session) ":/")))
     ))
 
 (defvar ncb-ip "172.16.4.146")
@@ -309,3 +309,29 @@
   ;; doesnt't work
   (term-send-string (get-buffer-process (current-buffer)) "setenv EMACS_SH t;\\tcsh\n")
   (cd (tbox-dir)))
+
+(defun onewireshark (pcap)
+  "Runs onewireshark for given file. In case on remote host, copy it to /proj/scratch/$USER"
+  (interactive (list (or (ffap-file-at-point) (read-file-name "pcap: "))))
+  (let ((pcap (expand-file-name pcap))
+        (local-dir default-directory))
+    (when (file-remote-p pcap)
+      (set 'local-dir (concat "/proj/scratch/" (user-login-name)))
+      (copy-file pcap (concat local-dir "/") t)
+      (set 'pcap (file-name-nondirectory pcap)))
+    (with-temp-buffer
+      (cd local-dir)
+      (compile (concat "onewireshark " pcap)))))
+
+(defun fprof (analysis-file)
+  "Runs erlgrind and qcachegrind for given analysis file. In case on remote host, copy to /proj/scratch/$USER"
+  (interactive (list (or (ffap-file-at-point) (read-file-name "analysis file: "))))
+  (let ((analysis-file (expand-file-name analysis-file))
+        (local-dir default-directory))
+    (when (file-remote-p analysis-file)
+      (set 'local-dir (concat "/proj/scratch/" (user-login-name)))
+      (copy-file analysis-file (concat local-dir "/") t)
+      (set 'analysis-file (file-name-nondirectory analysis-file)))
+    (with-temp-buffer
+      (cd local-dir)
+      (shell-command-verbose (concat "erlgrind -p " analysis-file "; qcachegrind " (string-replace "analysis" "cgrind" analysis-file) "&")))))

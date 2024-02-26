@@ -348,8 +348,8 @@ determine the target buffer."
   (insert (x-get-selection selection)))
 
 ;; Since VNC uses cut-buffer, use own paste-functionality
-(if (and (getenv "VNCDESKTOP") (getenv "DISPLAY"))
-    (setq-default interprogram-paste-function 'my-x-cut-buffer-or-selection-value))
+;;(if (and (getenv "VNCDESKTOP") (getenv "DISPLAY"))
+;;    (setq-default interprogram-paste-function 'my-x-cut-buffer-or-selection-value))
 ;; My own functions
 ;;;;;;;;;;;;;;;;;;;
 ;;; Return the value of the current X selection.

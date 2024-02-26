@@ -122,7 +122,7 @@ or just \\[negative-argument]), pop back to the previous tag gone to.
 
 If third arg REGEXP-P is non-nil, treat TAGNAME as a regexp.
 
-A marker representing the point when this command is onvoked is pushed
+A marker representing the point when this command is invoked is pushed
 onto a ring and may be popped back to with \\[pop-tag-mark].
 Contrast this with the ring of marks gone to by the command.
 
@@ -130,8 +130,9 @@ See documentation of variable `tags-file-name'."
   (interactive (find-tag-interactive "Find tag: "))
 
   (setq find-tag-history (cons tagname find-tag-history))
-  ;; Save the current buffer's value of `find-tag-hook' before selecting the
-  ;; tags table buffer.
+  ;; Save the current buffer's value of `find-tag-hook' before
+  ;; selecting the tags table buffer.  For the same reason, save value
+  ;; of `tags-file-name' in case it has a buffer-local value.
   (let ((local-find-tag-hook find-tag-hook))
     (if (eq '- next-p)
 	;; Pop back to a previous location.
@@ -148,7 +149,9 @@ See documentation of variable `tags-file-name'."
 	      ;; Run the user's hook.  Do we really want to do this for pop?
 	      (run-hooks 'local-find-tag-hook))))
       ;; Record whence we came.
-      (ring-insert find-tag-marker-ring (point-marker))
+      (if (> emacs-major-version 28)
+          (xref-push-marker-stack)
+        (ring-insert find-tag-marker-ring (point-marker)))
       (if next-p
 	  ;; Find the same table we last used.
 	  (visit-tags-table-buffer 'same)
