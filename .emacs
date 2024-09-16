@@ -39,6 +39,7 @@
 (load ".emacs_versions")
 
 ;; Set default values
+(setq-default make-backup-files nil)
 (setq-default confirm-kill-emacs 'yes-or-no-p)
 (setq-default inhibit-default-init 1)
 (setq-default next-line-add-newlines nil)

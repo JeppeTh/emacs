@@ -16,7 +16,7 @@
     (if (not (string-match "Command not found" (tbox-cmd-to-string "which kubectl")))
         (setq tbox-container-session tbox-session))
     (message nil)
-    (when (not (eq (concat tbox-session tbox-host) old-tbox))
+    (when (not (equal (concat tbox-session tbox-host) old-tbox))
       (setq tbox-pods nil)
       (fix-tecsas-env)))
 )
@@ -157,6 +157,7 @@
   (let ((i 10))
     (if (process-live-p (get-process pod))
         (switch-to-buffer (make-process-buffer-name pod))
+      (safe-delete-process pod)
       ;; tbox can't handle -cmd correctly - i.e. -cmd "kubectl exec ...  bash -c 'tcsh || sh'"
       ;; So execute via tbox term
       ;;(tbox-make-term pod (concat "kubectl exec -it " pod " -- bash -c 'tcsh || sh'"))
@@ -213,6 +214,7 @@
          (cmd (concat cmd "\"")))
     (if (process-live-p (get-process name))
         (switch-to-buffer term-buffer-name)
+      (safe-delete-process name)
       (apply 'make-term (append (list name) (make-tbox-cmd-list cmd startfile)))
       (switch-to-buffer term-buffer-name)
       (compilation-shell-minor-mode 1)
@@ -264,6 +266,7 @@
          )
     (if (process-live-p (get-process name))
         (switch-to-buffer screen-name)
+      (safe-delete-process name)
       ;; Make sure tbox-session is initialized
       (tbox-session)
       (let* (
@@ -321,7 +324,7 @@
       (set 'pcap (file-name-nondirectory pcap)))
     (with-temp-buffer
       (cd local-dir)
-      (compile (concat "onewireshark " pcap)))))
+      (compile (concat "onewireshark " pcap " &")))))
 
 (defun fprof (analysis-file)
   "Runs erlgrind and qcachegrind for given analysis file. In case on remote host, copy to /proj/scratch/$USER"

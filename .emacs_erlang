@@ -702,6 +702,7 @@ editing control characters:
          (to_erl_name (make-process-buffer-name name)))
     (if (process-live-p (get-process name))
         (switch-to-buffer to_erl_name)
+      (safe-delete-process name)
       (if is-tbox
           (tbox-make-comint name "erl" is-ncb)
         (make-comint name "to_erl" nil pipe))
@@ -844,6 +845,7 @@ editing control characters:
          (proc-name (make-process-buffer-name name)))
     (if (process-live-p (get-process name))
         (switch-to-buffer proc-name)
+      (safe-delete-process name)
       (if (file-readable-p "/tmp/erlang.pipe.1.r")
           (make-comint name cmd)
         (fix-tecsas-env)
@@ -872,6 +874,7 @@ editing control characters:
         (switch-to-buffer yang-buffer-name)
       (if (get-buffer yang-buffer-name)
           (kill-buffer yang-buffer-name))
+      (safe-delete-process name)
       (let ((yang-ip (get-yang-ip)))
       ;; Check ts_425 for users
       (tbox-make-term name (concat "ssh -l user6 " yang-ip " -p 2222") nil nil "~/.yang_history")
